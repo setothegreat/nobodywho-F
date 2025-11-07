@@ -956,6 +956,10 @@ impl<'a> Worker<'_, ChatWorker> {
                 sampler.lazy_grammar_trigger = "<tool_call>".into(); // TODO: multiple tool call tokens
                 sampler.gbnf_grammar = tool_grammar.to_string();
             }
+            else {
+                sampler.use_grammar = true;
+                sampler.grammar_root = "superroot".into();
+            }
         }
 
         // get the finished response
