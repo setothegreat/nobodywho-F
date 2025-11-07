@@ -949,11 +949,13 @@ impl<'a> Worker<'_, ChatWorker> {
         self.extra.chat_state.add_user_message(text);
 
         let mut sampler = sampler;
-        if let Some(ref tool_grammar) = self.extra.tool_grammar && !sampler.use_grammar {
-            sampler.use_grammar = true;
-            sampler.grammar_root = "superroot".into();
-            sampler.lazy_grammar_trigger = "<tool_call>".into(); // TODO: multiple tool call tokens
-            sampler.gbnf_grammar = tool_grammar.to_string();
+        if let Some(ref tool_grammar) = self.extra.tool_grammar {
+            if !sampler.use_grammar { // We just nest the check
+                sampler.use_grammar = true;
+                sampler.grammar_root = "superroot".into();
+                sampler.lazy_grammar_trigger = "<tool_call>".into(); // TODO: multiple tool call tokens
+                sampler.gbnf_grammar = tool_grammar.to_string();
+            }
         }
 
         // get the finished response
