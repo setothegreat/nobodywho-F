@@ -950,7 +950,7 @@ impl<'a> Worker<'_, ChatWorker> {
 
         let mut sampler = sampler;
         if let Some(ref tool_grammar) = self.extra.tool_grammar {
-            if !sampler.use_grammar { // We just nest the check
+            if !sampler.use_grammar {
                 sampler.use_grammar = true;
                 sampler.grammar_root = "superroot".into();
                 sampler.lazy_grammar_trigger = "<tool_call>".into(); // TODO: multiple tool call tokens
