@@ -955,8 +955,7 @@ impl<'a> Worker<'_, ChatWorker> {
                 sampler.grammar_root = "superroot".into();
                 sampler.lazy_grammar_trigger = "<tool_call>".into(); // TODO: multiple tool call tokens
                 sampler.gbnf_grammar = tool_grammar.to_string();
-            }
-            else {
+            } else {
                 sampler.use_grammar = true;
                 sampler.grammar_root = "superroot".into();
             }
