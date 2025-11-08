@@ -20,11 +20,8 @@ pub struct SamplerConfig {
     pub gbnf_grammar: String,
     pub lazy_grammar_trigger: String,
     pub grammar_root: String,
-    #[derive(Default)]
     pub use_manual_tool_calling: bool,
-    #[derive(Default)]
     pub manual_tool_prefix: String,
-    #[derive(Default)]
     pub manual_tool_sequence: Vec<ManualToolCall>,
 }
 
