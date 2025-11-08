@@ -948,45 +948,144 @@ impl<'a> Worker<'_, ChatWorker> {
 
         self.extra.chat_state.add_user_message(text);
 
-        let mut sampler = sampler;
-        if let Some(ref tool_grammar) = self.extra.tool_grammar {
-            if !sampler.use_grammar {
-                sampler.use_grammar = true;
-                sampler.grammar_root = "superroot".into();
-                sampler.lazy_grammar_trigger = "<tool_call>".into(); // TODO: multiple tool call tokens
-                sampler.gbnf_grammar = tool_grammar.to_string();
-            } else {
-                sampler.use_grammar = true;
-                sampler.grammar_root = "superroot".into();
+        let mut pass_1_sampler = sampler.clone(); // Use a copy of the original sampler
+
+        if pass_1_sampler.use_manual_tool_calling {
+            // User wants to force tools. We build a GBNF for this.
+            debug!("Using manual tool calling configuration.");
+
+            let mut forced_tool_rules = Vec::new();
+            let mut all_tool_gbnf_parts = Vec::new();
+
+            // 1. Find all tools and generate their individual GBNF
+            for tool_call_config in &pass_1_sampler.manual_tool_sequence {
+                let tool_name = &tool_call_config.tool_name;
+                let Some(tool) = self.extra.tools.iter().find(|t| t.name == *tool_name) else {
+                    error!("Manual Tool Call: Tool '{}' not found.", tool_name);
+                    // Return an error instead of panicking
+                    return Err(SayError::WrappedResponseError(WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(GenerateResponseError::InvalidSamplerConfig))));
+                };
+
+                // Use grammar_from_tools to get the GBNF for this *one* tool
+                let tool_grammar = grammar_from_tools(&[tool.clone()]).map_err(|e| {
+                    error!("Failed to generate GBNF for forced tool '{}': {}", tool_name, e);
+                    SayError::WrappedResponseError(WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(GenerateResponseError::InvalidSamplerConfig)))
+                })?;
+
+                // `grammar_from_tools` creates a full GBNF. We must extract
+                // the rules we need and rename 'toolcall' to be unique.
+                let tool_rule_name = format!("tool_call_{}", tool_name);
+                for item in tool_grammar.items {
+                    match item {
+                        gbnf::GrammarItem::Rule(rule) if rule.lhs.name == "toolcall" => {
+                            // This is the rule for the <tool_call> itself. Rename it.
+                            forced_tool_rules.push(format!("{} ::= {}", tool_rule_name, rule.rhs));
+                        }
+                        gbnf::GrammarItem::Rule(rule) if rule.lhs.name != "superroot" => {
+                            // Add all other dependent rules (like json, ws, root, value, object, etc.)
+                            all_tool_gbnf_parts.push(rule.to_string());
+                        }
+                        _ => {} // Ignore the 'superroot' rule (toolcall+)
+                    }
+                }
+            }
+
+            // De-duplicate the dependent rules (json, ws, etc.)
+            all_tool_gbnf_parts.sort();
+            all_tool_gbnf_parts.dedup();
+
+            // 2. Build the new 'root' rule from the sequence
+            let mut root_rule = "root ::= ".to_string();
+
+            // Add the prefix (if any)
+            if !pass_1_sampler.manual_tool_prefix.is_empty() {
+                // We must escape the prefix to be a valid GBNF string literal
+                let escaped_prefix = format!("{:?}", pass_1_sampler.manual_tool_prefix);
+                root_rule.push_str(&escaped_prefix);
+                root_rule.push(' ');
+            }
+
+            // Add the tool sequence with min/max repetition
+            let mut tool_sequence_rules = Vec::new();
+            for tool_call_config in &pass_1_sampler.manual_tool_sequence {
+                let tool_rule_name = format!("tool_call_{}", tool_call_config.tool_name);
+
+                // --- Build GBNF repetition string {min,max} ---
+                let repetition_str: String;
+                let min = tool_call_config.min_calls;
+                let max = tool_call_config.max_calls;
+
+                if min == 0 && max == 1 {
+                    repetition_str = "?".to_string(); // Optional, 0 or 1
+                } else if min == 1 && max == 1 {
+                    repetition_str = "".to_string(); // Required, exactly 1
+                } else if max == -1 { // -1 means unlimited
+                    if min == 0 {
+                        repetition_str = "*".to_string(); // 0 or more
+                    } else {
+                        repetition_str = format!("{{{},}}", min); // N or more (e.g., {1,} is '+')
+                    }
+                } else if max > 0 && max >= min {
+                    repetition_str = format!("{{{},{}}}", min, max); // Between N and M
+                } else {
+                    // Fallback for invalid config (e.g., min > max, or max is 0 or invalid)
+                    warn!("Invalid min/max calls for tool '{}' (min: {}, max: {}). Defaulting to 1 call.",
+                          tool_call_config.tool_name, min, max);
+                    repetition_str = "".to_string(); // Default to 1
+                }
+                // --- End repetition string logic ---
+
+                tool_sequence_rules.push(format!("( {} ){}", tool_rule_name, repetition_str));
+            }
+            root_rule.push_str(&tool_sequence_rules.join(" "));
+
+            // 3. Assemble the final GBNF
+            let final_gbnf = format!(
+                "{}\n{}\n{}",
+                root_rule,
+                forced_tool_rules.join("\n"),
+                    all_tool_gbnf_parts.join("\n")
+            );
+
+            trace!("Generated Manual Tool GBNF: {}", final_gbnf);
+
+            // 4. Set the pass_1_sampler to use this new GBNF
+            pass_1_sampler.use_grammar = true;
+            pass_1_sampler.gbnf_grammar = final_gbnf;
+            pass_1_sampler.grammar_root = "root".into();
+
+        } else if !pass_1_sampler.use_grammar {
+            // Manual calling is off, AND user grammar is off. Use default tool grammar.
+            debug!("Using default tool grammar.");
+            if let Some(ref tool_grammar) = self.extra.tool_grammar {
+                pass_1_sampler.use_grammar = true;
+                pass_1_sampler.grammar_root = "superroot".into();
+                pass_1_sampler.lazy_grammar_trigger = "<tool_call>".into();
+                pass_1_sampler.gbnf_grammar = tool_grammar.to_string();
             }
         }
+        // else: user has `use_grammar` checked but `use_manual_tool_calling` unchecked.
+        // We just use their custom GBNF as-is. This is correct.
 
-        // get the finished response
+
+        // get the finished response (Pass 1)
         let mut response: String = self.wrapped_update_context_and_generate_response(
-            sampler.clone(),
-            stop_words.clone(),
-            respond.clone(),
-            tool_call_begin.into(),
+            pass_1_sampler.clone(), // <-- Use Pass 1 sampler
+                                                                                     stop_words.clone(),
+                                                                                     respond.clone(),
+                                                                                     tool_call_begin.into(),
         )?;
 
+        // This loop is the problem. It will re-run with the same sampler.
         while let Some(tool_calls) = extract_tool_calls(&response) {
             debug!("Got tool calls! {tool_calls:?}");
 
             self.extra.chat_state.add_tool_calls(tool_calls.clone());
 
             for tool_call in tool_calls {
-                // find the tool
-                // this is just a stupid linear search
-                // but I think it's probably faster than something fancy as long as we have few tools
-                // /shrug I'm happy to be wrong
+                // ... (existing tool finding/calling logic) ...
                 let Some(tool) = self.extra.tools.iter().find(|t| t.name == tool_call.name) else {
-                    // in case the tool isn't found.
-                    // I *think* this should be impossible, as long as the tool calling grammar
-                    // works.
-                    error!(
-                        "Model triggered tool call for invalid tool name: {}",
-                        tool_call.name
-                    );
+                    error!("Tool call for invalid tool name: {}", tool_call.name);
                     let errmsg = format!("ERROR - Invalid tool name: {}", tool_call.name);
                     self.extra.chat_state.add_tool_resp(tool_call.name, errmsg);
                     continue;
@@ -995,19 +1094,36 @@ impl<'a> Worker<'_, ChatWorker> {
                 // call the tool
                 let response = (tool.function)(tool_call.arguments);
                 debug!(?tool_call.name, ?response);
-
-                // add to chat history
-                self.extra
-                    .chat_state
-                    .add_tool_resp(tool_call.name, response);
+                self.extra.chat_state.add_tool_resp(tool_call.name, response);
             }
 
-            // get the finished response
+            // --- This is the new logic for Pass 2 ---
+            // We now create the sampler for the *next* generation pass.
+
+            // We use the *original* sampler config from Godot (`sampler`)
+            // as the base for our Pass 2 sampler.
+            let mut pass_2_sampler = sampler.clone();
+
+            // We check the *original* `use_grammar` flag.
+            // This flag is now re-purposed as "Use Follow-up Grammar".
+            if sampler.use_grammar {
+                debug!("Using follow-up GBNF grammar.");
+                pass_2_sampler.use_grammar = true;
+                pass_2_sampler.gbnf_grammar = sampler.gbnf_grammar.clone();
+                pass_2_sampler.grammar_root = sampler.grammar_root.clone();
+            } else {
+                // No follow-up grammar. Disable grammar entirely for the
+                // follow-up to allow the model to speak freely.
+                debug!("No follow-up GBNF. Disabling grammar for follow-up.");
+                pass_2_sampler.use_grammar = false;
+            }
+
+            // get the finished response (Pass 2)
             response = self.wrapped_update_context_and_generate_response(
-                sampler.clone(),
+                pass_2_sampler, // <-- Use Pass 2 sampler
                 stop_words.clone(),
-                respond.clone(),
-                tool_call_begin.into(),
+                                                                         respond.clone(),
+                                                                         tool_call_begin.into(),
             )?;
         }
         debug_assert!(!response.contains(tool_call_begin));
