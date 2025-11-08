@@ -245,7 +245,13 @@ impl IResource for NobodyWhoSampler {
                 .expect("Unexpected type for manual_tool_sequence. Expected Array.");
             let mut tool_vec = Vec::new();
             for item in godot_array.iter_shared() {
-                if let Ok(dict) = Dictionary::try_from_variant(&item) {
+                if item.is_nil() {
+                    tool_vec.push(nobodywho::sampler_config::ManualToolCall {
+                        tool_name: "new_tool".to_string(),
+                        min_calls: 1,
+                        max_calls: 1,
+                    });
+                } else if let Ok(dict) = Dictionary::try_from_variant(&item) {
                     let tool_name = dict
                         .get_or_nil("tool_name")
                         .try_to::<GString>()
