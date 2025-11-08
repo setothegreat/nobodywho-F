@@ -973,35 +973,35 @@ impl<'a> Worker<'_, ChatWorker> {
                 };
             };
 
-                // Use grammar_from_tools to get the GBNF for this *one* tool
-                let tool_grammar = grammar_from_tools(&[tool.clone()]).map_err(|e| {
-                    error!(
-                        "Failed to generate GBNF for forced tool '{}': {}",
-                        tool_name, e
-                    );
-                    SayError::WrappedResponseError(WrappedResponseError::InferenceError(
-                        InferenceError::GenerateResponseError(
-                            GenerateResponseError::InvalidSamplerConfig,
-                        ),
-                    ))
-                })?;
+            // Use grammar_from_tools to get the GBNF for this *one* tool
+            let tool_grammar = grammar_from_tools(&[tool.clone()]).map_err(|e| {
+                error!(
+                    "Failed to generate GBNF for forced tool '{}': {}",
+                    tool_name, e
+                );
+                SayError::WrappedResponseError(WrappedResponseError::InferenceError(
+                    InferenceError::GenerateResponseError(
+                        GenerateResponseError::InvalidSamplerConfig,
+                    ),
+                ))
+            })?;
 
-                // `grammar_from_tools` creates a full GBNF. We must extract
-                // the rules we need and rename 'toolcall' to be unique.
-                let tool_rule_name = format!("tool_call_{}", tool_name);
-                for item in tool_grammar.items {
-                    match item {
-                        gbnf::GrammarItem::Rule(rule) if rule.lhs.name == "toolcall" => {
-                            // This is the rule for the <tool_call> itself. Rename it.
-                            forced_tool_rules.push(format!("{} ::= {}", tool_rule_name, rule.rhs));
+            // `grammar_from_tools` creates a full GBNF. We must extract
+            // the rules we need and rename 'toolcall' to be unique.
+            let tool_rule_name = format!("tool_call_{}", tool_name);
+            for item in tool_grammar.items {
+                match item {
+                    gbnf::GrammarItem::Rule(rule) if rule.lhs.name == "toolcall" => {
+                        // This is the rule for the <tool_call> itself. Rename it.
+                        forced_tool_rules.push(format!("{} ::= {}", tool_rule_name, rule.rhs));
                         }
                         gbnf::GrammarItem::Rule(rule) if rule.lhs.name != "superroot" => {
                             // Add all other dependent rules (like json, ws, root, value, object, etc.)
                             all_tool_gbnf_parts.push(rule.to_string());
                         }
-                        _ => {} // Ignore the 'superroot' rule (toolcall+)
-                    }
+                    _ => {} // Ignore the 'superroot' rule (toolcall+)
                 }
+            }
 
             // De-duplicate the dependent rules (json, ws, etc.)
             all_tool_gbnf_parts.sort();
