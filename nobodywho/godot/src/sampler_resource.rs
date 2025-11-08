@@ -200,7 +200,7 @@ impl IResource for NobodyWhoSampler {
         if property_str == "manual_tool_sequence" {
             let mut godot_array = Array::<Variant>::new(); 
             for tool_call in &self.sampler_config.manual_tool_sequence {
-            let mut godot_array = Array::<Variant>::new();
+                let mut dict = Dictionary::new();
                 dict.set("tool_name", tool_call.tool_name.clone());
                 dict.set("min_calls", tool_call.min_calls);
                 dict.set("max_calls", tool_call.max_calls);
@@ -249,7 +249,7 @@ impl IResource for NobodyWhoSampler {
             for item in godot_array.iter_shared() {
                 let dict = Dictionary::try_from_variant(&item)
                     .expect("Item in manual_tool_sequence is not a Dictionary.");
-                
+
                 let tool_name = dict
                     .get("tool_name")
                     .expect("Dictionary missing 'tool_name'")
