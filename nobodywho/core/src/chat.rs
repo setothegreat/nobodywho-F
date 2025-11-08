@@ -963,13 +963,27 @@ impl<'a> Worker<'_, ChatWorker> {
                 let Some(tool) = self.extra.tools.iter().find(|t| t.name == *tool_name) else {
                     error!("Manual Tool Call: Tool '{}' not found.", tool_name);
                     // Return an error instead of panicking
-                    return Err(SayError::WrappedResponseError(WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(GenerateResponseError::InvalidSamplerConfig))));
+                    return Err(SayError::WrappedResponseError(
+                        WrappedResponseError::InferenceError(
+                            InferenceError::GenerateResponseError(
+                                GenerateResponseError::InvalidSamplerConfig,
+                            ),
+                        ),
+                    ));
                 };
+            };
 
                 // Use grammar_from_tools to get the GBNF for this *one* tool
                 let tool_grammar = grammar_from_tools(&[tool.clone()]).map_err(|e| {
-                    error!("Failed to generate GBNF for forced tool '{}': {}", tool_name, e);
-                    SayError::WrappedResponseError(WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(GenerateResponseError::InvalidSamplerConfig)))
+                    error!(
+                        "Failed to generate GBNF for forced tool '{}': {}",
+                        tool_name, e
+                    );
+                    SayError::WrappedResponseError(WrappedResponseError::InferenceError(
+                        InferenceError::GenerateResponseError(
+                            GenerateResponseError::InvalidSamplerConfig,
+                        ),
+                    ))
                 })?;
 
                 // `grammar_from_tools` creates a full GBNF. We must extract
@@ -1019,7 +1033,7 @@ impl<'a> Worker<'_, ChatWorker> {
                     repetition_str = "?".to_string(); // Optional, 0 or 1
                 } else if min == 1 && max == 1 {
                     repetition_str = "".to_string(); // Required, exactly 1
-                } else if max == -1 { // -1 means unlimited
+                } else if max == -1 {
                     if min == 0 {
                         repetition_str = "*".to_string(); // 0 or more
                     } else {
@@ -1044,7 +1058,7 @@ impl<'a> Worker<'_, ChatWorker> {
                 "{}\n{}\n{}",
                 root_rule,
                 forced_tool_rules.join("\n"),
-                    all_tool_gbnf_parts.join("\n")
+                all_tool_gbnf_parts.join("\n")
             );
 
             trace!("Generated Manual Tool GBNF: {}", final_gbnf);
@@ -1053,7 +1067,6 @@ impl<'a> Worker<'_, ChatWorker> {
             pass_1_sampler.use_grammar = true;
             pass_1_sampler.gbnf_grammar = final_gbnf;
             pass_1_sampler.grammar_root = "root".into();
-
         } else if !pass_1_sampler.use_grammar {
             // Manual calling is off, AND user grammar is off. Use default tool grammar.
             debug!("Using default tool grammar.");
@@ -1067,13 +1080,12 @@ impl<'a> Worker<'_, ChatWorker> {
         // else: user has `use_grammar` checked but `use_manual_tool_calling` unchecked.
         // We just use their custom GBNF as-is. This is correct.
 
-
         // get the finished response (Pass 1)
         let mut response: String = self.wrapped_update_context_and_generate_response(
             pass_1_sampler.clone(), // <-- Use Pass 1 sampler
-                                                                                     stop_words.clone(),
-                                                                                     respond.clone(),
-                                                                                     tool_call_begin.into(),
+            stop_words.clone(),
+            respond.clone(),
+            tool_call_begin.into(),
         )?;
 
         // This loop is the problem. It will re-run with the same sampler.
@@ -1094,7 +1106,9 @@ impl<'a> Worker<'_, ChatWorker> {
                 // call the tool
                 let response = (tool.function)(tool_call.arguments);
                 debug!(?tool_call.name, ?response);
-                self.extra.chat_state.add_tool_resp(tool_call.name, response);
+                self.extra
+                    .chat_state
+                    .add_tool_resp(tool_call.name, response);
             }
 
             // --- This is the new logic for Pass 2 ---
@@ -1122,8 +1136,8 @@ impl<'a> Worker<'_, ChatWorker> {
             response = self.wrapped_update_context_and_generate_response(
                 pass_2_sampler, // <-- Use Pass 2 sampler
                 stop_words.clone(),
-                                                                         respond.clone(),
-                                                                         tool_call_begin.into(),
+                respond.clone(),
+                tool_call_begin.into(),
             )?;
         }
         debug_assert!(!response.contains(tool_call_begin));
