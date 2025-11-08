@@ -1301,7 +1301,6 @@ impl<'a> Worker<'_, ChatWorker> {
             .set_tokens_in_context(render_as_tokens);
         Ok(())
     }
-}
 
 /// wraps a response function in a closure to do two things:
 /// 1. save a copy of the response (using a channel) before sending it out
