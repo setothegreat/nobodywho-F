@@ -237,23 +237,33 @@ impl IResource for NobodyWhoSampler {
         if property_str == "manual_tool_sequence" {
             let godot_array = Array::try_from_variant(&value)
                 .expect("Unexpected type for manual_tool_sequence. Expected Array.");
-            
+
             let mut tool_vec = Vec::new();
             for item in godot_array.iter_shared() {
                 let dict = Dictionary::try_from_variant(&item)
                     .expect("Item in manual_tool_sequence is not a Dictionary.");
                 
-                let tool_name = dict.get("tool_name").expect("Dictionary missing 'tool_name'")
-                    .try_to::<GString>().expect("'tool_name' is not a String.").to_string();
-                let min_calls = dict.get("min_calls").expect("Dictionary missing 'min_calls'")
-                    .try_to::<i32>().expect("'min_calls' is not an Integer.");
-                let max_calls = dict.get("max_calls").expect("Dictionary missing 'max_calls'")
-                    .try_to::<i32>().expect("'max_calls' is not an Integer.");
+                let tool_name = dict
+                    .get("tool_name")
+                    .expect("Dictionary missing 'tool_name'")
+                    .try_to::<GString>()
+                    .expect("'tool_name' is not a String.")
+                    .to_string();
+                let min_calls = dict
+                    .get("min_calls")
+                    .expect("Dictionary missing 'min_calls'")
+                    .try_to::<i32>()
+                    .expect("'min_calls' is not an Integer.");
+                let max_calls = dict
+                    .get("max_calls")
+                    .expect("Dictionary missing 'max_calls'")
+                    .try_to::<i32>()
+                    .expect("'max_calls' is not an Integer.");
 
                 tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                     tool_name,
                     min_calls,
-                    max_calls
+                    max_calls,
                 });
             }
             self.sampler_config.manual_tool_sequence = tool_vec;
