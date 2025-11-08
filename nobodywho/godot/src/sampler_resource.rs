@@ -198,7 +198,7 @@ impl IResource for NobodyWhoSampler {
         let property_str = property.to_string();
 
         if property_str == "manual_tool_sequence" {
-            let mut godot_array = Array::<Variant>::new(); 
+            let mut godot_array = Array::<Variant>::new();
             for tool_call in &self.sampler_config.manual_tool_sequence {
                 let mut dict = Dictionary::new();
                 dict.set("tool_name", tool_call.tool_name.clone());
