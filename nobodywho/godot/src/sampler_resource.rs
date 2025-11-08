@@ -166,10 +166,9 @@ impl IResource for NobodyWhoSampler {
                 penalty_present: f32 : NONE,
                 use_grammar: bool : NONE,
                 gbnf_grammar: GString : MULTILINE_TEXT,
-                // --- ADDED NEW FIELDS ---
                 use_manual_tool_calling: bool : NONE,
                 manual_tool_prefix: GString : MULTILINE_TEXT,
-                manual_tool_sequence: Array : NONE // Godot type is Array
+                manual_tool_sequence: Array : NONE
             },
             methods: {
                 Greedy { },
@@ -200,7 +199,6 @@ impl IResource for NobodyWhoSampler {
             }
             return Some(Variant::from(godot_array));
         }
-        // --- END ADD ---
 
         get_property!(
             self, property,
@@ -211,10 +209,8 @@ impl IResource for NobodyWhoSampler {
                 penalty_present: f32,
                 use_grammar: bool,
                 gbnf_grammar: String,
-                // --- ADDED SIMPLE FIELDS ---
                 use_manual_tool_calling: bool,
                 manual_tool_prefix: String
-                // manual_tool_sequence is handled above
             },
             methods: {
                 Greedy { },
@@ -242,7 +238,7 @@ impl IResource for NobodyWhoSampler {
             for item in godot_array.iter_shared() {
                 let dict = Dictionary::try_from_variant(&item)
                     .expect("Item in manual_tool_sequence is not a Dictionary.");
-                
+
                 let tool_name = dict
                     .get("tool_name")
                     .expect("Dictionary missing 'tool_name'")
@@ -269,7 +265,6 @@ impl IResource for NobodyWhoSampler {
             self.sampler_config.manual_tool_sequence = tool_vec;
             return true;
         }
-        // --- END ADD ---
 
         set_property!(
             self, property, value,
@@ -280,10 +275,8 @@ impl IResource for NobodyWhoSampler {
                 penalty_present: f32,
                 use_grammar: bool,
                 gbnf_grammar: String,
-                // --- ADDED SIMPLE FIELDS ---
                 use_manual_tool_calling: bool,
                 manual_tool_prefix: String
-                // manual_tool_sequence is handled above
             },
             methods: {
                 Greedy { },
