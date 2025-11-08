@@ -318,9 +318,7 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32,
                 penalty_present: f32,
                 use_grammar: bool,
-                // gbnf_grammar: String, // <-- Handled manually
-                use_manual_tool_calling: bool,
-                // manual_tool_prefix: String // <-- Handled manually
+                use_manual_tool_calling: bool
             },
             methods: {
                 Greedy { },
