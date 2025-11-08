@@ -270,9 +270,9 @@ impl IResource for NobodyWhoSampler {
                         .map_or(String::new(), |s| s.to_string());
 
                     // CRASH FIX: Read from Godot as i64, then cast to Rust's i32
-                    let min_calls = 
+                    let min_calls =
                         dict.get_or_nil("min_calls").try_to::<i64>().unwrap_or(0) as i32;
-                    let max_calls = 
+                    let max_calls =
                         dict.get_or_nil("max_calls").try_to::<i64>().unwrap_or(1) as i32;
 
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
