@@ -249,7 +249,6 @@ impl IResource for NobodyWhoSampler {
         // --- START: manual_tool_sequence SET ---
         if property_str == "manual_tool_sequence" {
             let godot_array = VariantArray::try_from_variant(&value);
-                .expect("Unexpected type for manual_tool_sequence. Expected Array.");
 
             let mut tool_vec = Vec::new();
 
