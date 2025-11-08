@@ -1002,7 +1002,6 @@ impl<'a> Worker<'_, ChatWorker> {
                         _ => {} // Ignore the 'superroot' rule (toolcall+)
                     }
                 }
-            }
 
             // De-duplicate the dependent rules (json, ws, etc.)
             all_tool_gbnf_parts.sort();
