@@ -237,34 +237,28 @@ impl IResource for NobodyWhoSampler {
         )
     }
 
-fn set_property(&mut self, property: StringName, value: Variant) -> bool {
+    fn set_property(&mut self, property: StringName, value: Variant) -> bool {
         let property_str = property.to_string();
 
         if property_str == "manual_tool_sequence" {
             let godot_array = VariantArray::try_from_variant(&value)
                 .expect("Unexpected type for manual_tool_sequence. Expected Array.");
-
             let mut tool_vec = Vec::new();
             for item in godot_array.iter_shared() {
-
                 if let Ok(dict) = Dictionary::try_from_variant(&item) {
-
-                    let tool_name = dict.get_or_nil("tool_name")
+                    let tool_name = dict
+                        .get_or_nil("tool_name")
                         .try_to::<GString>()
                         .map_or(String::new(), |s| s.to_string());
 
-                    let min_calls = dict.get_or_nil("min_calls")
-                        .try_to::<i32>()
-                        .unwrap_or(0);
+                    let min_calls = dict.get_or_nil("min_calls").try_to::<i32>().unwrap_or(0);
 
-                    let max_calls = dict.get_or_nil("max_calls")
-                        .try_to::<i32>()
-                        .unwrap_or(1);
+                    let max_calls = dict.get_or_nil("max_calls").try_to::<i32>().unwrap_or(1);
 
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name,
                         min_calls,
-                        max_calls
+                        max_calls,
                     });
                 }
             }
