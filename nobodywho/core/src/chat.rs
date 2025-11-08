@@ -934,20 +934,21 @@ impl<'a> Worker<'_, ChatWorker> {
         respond: F,
     ) -> Result<&mut Self, SayError>
     where
-        F: Fn(llm::WriteOutput) + Clone,
+    F: Fn(llm::WriteOutput) + Clone,
     {
         // reset the stop flag
         self.extra
-            .should_stop
-            .store(false, std::sync::atomic::Ordering::Relaxed);
+        .should_stop
+        .store(false, std::sync::atomic::Ordering::Relaxed);
 
         // TODO: this is the token used by qwen3
-        //       but e.g. deepseek uses "<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>" instead.
+        //       but e.g. deepseek uses "<｜tool calls begin｜><｜tool call begin｜>" instead.
         //       we need to support multiple different tool call begin tokens
         let tool_call_begin = "<tool_call>";
 
         self.extra.chat_state.add_user_message(text);
 
+        // This is the sampler for the FIRST generation pass
         let mut pass_1_sampler = sampler.clone(); // Use a copy of the original sampler
 
         if pass_1_sampler.use_manual_tool_calling {
@@ -958,6 +959,7 @@ impl<'a> Worker<'_, ChatWorker> {
             let mut all_tool_gbnf_parts = Vec::new();
 
             // 1. Find all tools and generate their individual GBNF
+            // --- START FIX: MOVED CODE INSIDE LOOP ---
             for tool_call_config in &pass_1_sampler.manual_tool_sequence {
                 let tool_name = &tool_call_config.tool_name;
                 let Some(tool) = self.extra.tools.iter().find(|t| t.name == *tool_name) else {
@@ -971,37 +973,40 @@ impl<'a> Worker<'_, ChatWorker> {
                         ),
                     ));
                 };
-            }
 
-            // Use grammar_from_tools to get the GBNF for this *one* tool
-            let tool_grammar = grammar_from_tools(&[tool.clone()]).map_err(|e| {
-                error!(
-                    "Failed to generate GBNF for forced tool '{}': {}",
-                    tool_name, e
-                );
-                SayError::WrappedResponseError(WrappedResponseError::InferenceError(
-                    InferenceError::GenerateResponseError(
-                        GenerateResponseError::InvalidSamplerConfig,
-                    ),
-                ))
-            })?;
+                // Use grammar_from_tools to get the GBNF for this *one* tool
+                let tool_grammar = grammar_from_tools(&[tool.clone()]).map_err(|e| {
+                    error!(
+                        "Failed to generate GBNF for forced tool '{}': {}",
+                        tool_name, e
+                    );
+                    SayError::WrappedResponseError(WrappedResponseError::InferenceError(
+                        InferenceError::GenerateResponseError(
+                            GenerateResponseError::InvalidSamplerConfig,
+                        ),
+                    ))
+                })?;
 
-            // `grammar_from_tools` creates a full GBNF. We must extract
-            // the rules we need and rename 'toolcall' to be unique.
-            let tool_rule_name = format!("tool_call_{}", tool_name);
-            for item in tool_grammar.items {
-                match item {
-                    gbnf::GrammarItem::Rule(rule) if rule.lhs.name == "toolcall" => {
-                        // This is the rule for the <tool_call> itself. Rename it.
-                        forced_tool_rules.push(format!("{} ::= {}", tool_rule_name, rule.rhs));
+                // `grammar_from_tools` creates a full GBNF. We must extract
+                // the rules we need and rename 'toolcall' to be unique.
+                let tool_rule_name = format!("tool_call_{}", tool_name);
+                for item in tool_grammar.items {
+                    match item {
+                        gbnf::GrammarItem::Rule(rule) if rule.lhs.name == "toolcall" => {
+                            // This is the rule for the <tool_call> itself. Rename it.
+                            forced_tool_rules.push(format!("{} ::= {}", tool_rule_name, rule.rhs));
+                        }
+                        gbnf::GrammarItem::Rule(rule) if rule.lhs.name != "superroot" => {
+                            // Add all other dependent rules (like json, ws, root, value, object, etc.)
+                            // --- START FIX: CHANGED 'rule' to 'item' ---
+                            all_tool_gbnf_parts.push(item.to_string());
+                            // --- END FIX ---
+                        }
+                        _ => {} // Ignore the 'superroot' rule (toolcall+)
                     }
-                    gbnf::GrammarItem::Rule(rule) if rule.lhs.name != "superroot" => {
-                        // Add all other dependent rules (like json, ws, root, value, object, etc.)
-                        all_tool_gbnf_parts.push(rule.to_string());
-                    }
-                    _ => {} // Ignore the 'superroot' rule (toolcall+)
                 }
             }
+            // --- END FIX: MOVED CODE INSIDE LOOP ---
 
             // De-duplicate the dependent rules (json, ws, etc.)
             all_tool_gbnf_parts.sort();
@@ -1035,8 +1040,10 @@ impl<'a> Worker<'_, ChatWorker> {
                 } else if max == -1 {
                     if min == 0 {
                         repetition_str = "*".to_string(); // 0 or more
+                    } else if min == 1 {
+                        repetition_str = "+".to_string(); // 1 or more
                     } else {
-                        repetition_str = format!("{{{},}}", min); // N or more (e.g., {1,} is '+')
+                        repetition_str = format!("{{{},}}", min); // N or more (e.g., {2,})
                     }
                 } else if max > 0 && max >= min {
                     repetition_str = format!("{{{},{}}}", min, max); // Between N and M
@@ -1057,7 +1064,7 @@ impl<'a> Worker<'_, ChatWorker> {
                 "{}\n{}\n{}",
                 root_rule,
                 forced_tool_rules.join("\n"),
-                all_tool_gbnf_parts.join("\n")
+                    all_tool_gbnf_parts.join("\n")
             );
 
             trace!("Generated Manual Tool GBNF: {}", final_gbnf);
@@ -1082,9 +1089,9 @@ impl<'a> Worker<'_, ChatWorker> {
         // get the finished response (Pass 1)
         let mut response: String = self.wrapped_update_context_and_generate_response(
             pass_1_sampler.clone(), // <-- Use Pass 1 sampler
-            stop_words.clone(),
-            respond.clone(),
-            tool_call_begin.into(),
+                                                                                     stop_words.clone(),
+                                                                                     respond.clone(),
+                                                                                     tool_call_begin.into(),
         )?;
 
         // This loop is the problem. It will re-run with the same sampler.
@@ -1106,8 +1113,8 @@ impl<'a> Worker<'_, ChatWorker> {
                 let response = (tool.function)(tool_call.arguments);
                 debug!(?tool_call.name, ?response);
                 self.extra
-                    .chat_state
-                    .add_tool_resp(tool_call.name, response);
+                .chat_state
+                .add_tool_resp(tool_call.name, response);
             }
 
             // --- This is the new logic for Pass 2 ---
@@ -1135,8 +1142,8 @@ impl<'a> Worker<'_, ChatWorker> {
             response = self.wrapped_update_context_and_generate_response(
                 pass_2_sampler, // <-- Use Pass 2 sampler
                 stop_words.clone(),
-                respond.clone(),
-                tool_call_begin.into(),
+                                                                         respond.clone(),
+                                                                         tool_call_begin.into(),
             )?;
         }
         debug_assert!(!response.contains(tool_call_begin));
@@ -1146,8 +1153,8 @@ impl<'a> Worker<'_, ChatWorker> {
         let render_as_tokens = self.get_render_as_tokens()?;
 
         self.extra
-            .chat_state
-            .set_tokens_in_context(render_as_tokens);
+        .chat_state
+        .set_tokens_in_context(render_as_tokens);
 
         Ok(self)
     }
