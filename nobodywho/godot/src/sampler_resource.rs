@@ -297,4 +297,4 @@ fn set_property(&mut self, property: StringName, value: Variant) -> bool {
                 MirostatV2 { temperature: f32, seed: u32, tau: f32, eta: f32 }
             }
         )
-    }
+}
