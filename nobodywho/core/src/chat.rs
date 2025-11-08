@@ -934,12 +934,12 @@ impl<'a> Worker<'_, ChatWorker> {
         respond: F,
     ) -> Result<&mut Self, SayError>
     where
-    F: Fn(llm::WriteOutput) + Clone,
+        F: Fn(llm::WriteOutput) + Clone,
     {
         // reset the stop flag
         self.extra
-        .should_stop
-        .store(false, std::sync::atomic::Ordering::Relaxed);
+            .should_stop
+            .store(false, std::sync::atomic::Ordering::Relaxed);
 
         // TODO: this is the token used by qwen3
         //       but e.g. deepseek uses "<｜tool calls begin｜><｜tool call begin｜>" instead.
@@ -1064,7 +1064,7 @@ impl<'a> Worker<'_, ChatWorker> {
                 "{}\n{}\n{}",
                 root_rule,
                 forced_tool_rules.join("\n"),
-                    all_tool_gbnf_parts.join("\n")
+                all_tool_gbnf_parts.join("\n")
             );
 
             trace!("Generated Manual Tool GBNF: {}", final_gbnf);
@@ -1089,9 +1089,9 @@ impl<'a> Worker<'_, ChatWorker> {
         // get the finished response (Pass 1)
         let mut response: String = self.wrapped_update_context_and_generate_response(
             pass_1_sampler.clone(), // <-- Use Pass 1 sampler
-                                                                                     stop_words.clone(),
-                                                                                     respond.clone(),
-                                                                                     tool_call_begin.into(),
+            stop_words.clone(),
+            respond.clone(),
+            tool_call_begin.into(),
         )?;
 
         // This loop is the problem. It will re-run with the same sampler.
@@ -1113,8 +1113,8 @@ impl<'a> Worker<'_, ChatWorker> {
                 let response = (tool.function)(tool_call.arguments);
                 debug!(?tool_call.name, ?response);
                 self.extra
-                .chat_state
-                .add_tool_resp(tool_call.name, response);
+                    .chat_state
+                    .add_tool_resp(tool_call.name, response);
             }
 
             // --- This is the new logic for Pass 2 ---
@@ -1142,8 +1142,8 @@ impl<'a> Worker<'_, ChatWorker> {
             response = self.wrapped_update_context_and_generate_response(
                 pass_2_sampler, // <-- Use Pass 2 sampler
                 stop_words.clone(),
-                                                                         respond.clone(),
-                                                                         tool_call_begin.into(),
+                respond.clone(),
+                tool_call_begin.into(),
             )?;
         }
         debug_assert!(!response.contains(tool_call_begin));
@@ -1153,8 +1153,8 @@ impl<'a> Worker<'_, ChatWorker> {
         let render_as_tokens = self.get_render_as_tokens()?;
 
         self.extra
-        .chat_state
-        .set_tokens_in_context(render_as_tokens);
+            .chat_state
+            .set_tokens_in_context(render_as_tokens);
 
         Ok(self)
     }
