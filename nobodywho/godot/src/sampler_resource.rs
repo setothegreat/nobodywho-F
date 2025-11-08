@@ -184,7 +184,7 @@ impl IResource for NobodyWhoSampler {
         );
 
         properties.push(
-            godot::meta::PropertyInfo::new_export::<Array<Variant>>("manual_tool_sequence")
+            godot::meta::PropertyInfo::new_export::<VariantArray>("manual_tool_sequence")
                 .with_hint_info(PropertyHintInfo {
                     hint: PropertyHint::NONE,
                     hint_string: GString::new(),
@@ -198,14 +198,14 @@ impl IResource for NobodyWhoSampler {
         let property_str = property.to_string();
 
         if property_str == "manual_tool_sequence" {
-            let mut godot_array = Array::<Variant>::new();
+            let mut godot_array = VariantArray::new();
             for tool_call in &self.sampler_config.manual_tool_sequence {
                 let mut dict = Dictionary::new();
                 dict.set("tool_name", tool_call.tool_name.clone());
                 dict.set("min_calls", tool_call.min_calls);
                 dict.set("max_calls", tool_call.max_calls);
 
-                godot_array.push(Variant::from(dict));
+                godot_array.push(&Variant::from(dict));
             }
             return Some(Variant::from(godot_array));
         }
@@ -242,7 +242,7 @@ impl IResource for NobodyWhoSampler {
 
         // --- Manual handling for manual_tool_sequence ---
         if property_str == "manual_tool_sequence" {
-            let godot_array = Array::try_from_variant(&value)
+            let godot_array = VariantArray::try_from_variant(&value)
                 .expect("Unexpected type for manual_tool_sequence. Expected Array.");
 
             let mut tool_vec = Vec::new();
