@@ -211,10 +211,14 @@ impl IResource for NobodyWhoSampler {
         }
 
         if property_str == "gbnf_grammar" {
-            return Some(Variant::from(GString::from(&self.sampler_config.gbnf_grammar)));
+            return Some(Variant::from(
+                GString::from(&self.sampler_config.gbnf_grammar,
+            )));
         }
         if property_str == "manual_tool_prefix" {
-            return Some(Variant::from(GString::from(&self.sampler_config.manual_tool_prefix)));
+            return Some(Variant::from(GString::from(
+                &self.sampler_config.manual_tool_prefix,
+            )));
         }
 
         get_property!(
