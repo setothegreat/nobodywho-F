@@ -210,6 +210,13 @@ impl IResource for NobodyWhoSampler {
             return Some(Variant::from(godot_array));
         }
 
+        if property_str == "gbnf_grammar" {
+            return Some(Variant::from(GString::from(&self.sampler_config.gbnf_grammar)));
+        }
+        if property_str == "manual_tool_prefix" {
+            return Some(Variant::from(GString::from(&self.sampler_config.manual_tool_prefix)));
+        }
+
         get_property!(
             self, property,
             base: {
@@ -271,6 +278,25 @@ impl IResource for NobodyWhoSampler {
             self.sampler_config.manual_tool_sequence = tool_vec;
             self.base_mut().notify_property_list_changed();
             return true;
+        }
+
+        if property_str == "gbnf_grammar" {
+            return match GString::try_from_variant(&value) {
+                Ok(gstring) => {
+                    self.sampler_config.gbnf_grammar = gstring.to_string();
+                    true
+                }
+                Err(_) => false,
+            };
+        }
+        if property_str == "manual_tool_prefix" {
+            return match GString::try_from_variant(&value) {
+                Ok(gstring) => {
+                    self.sampler_config.manual_tool_prefix = gstring.to_string();
+                    true
+                }
+                Err(_) => false,
+            };
         }
 
         set_property!(
