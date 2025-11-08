@@ -2,6 +2,13 @@ use llama_cpp_2::model::LlamaModel;
 use llama_cpp_2::sampling::LlamaSampler;
 use tracing::error;
 
+#[derive(Clone, Debug, Default)]
+pub struct ManualToolCall {
+    pub tool_name: String,
+    pub min_calls: i32,
+    pub max_calls: i32,
+}
+
 #[derive(Clone, Debug)]
 pub struct SamplerConfig {
     pub method: SamplerMethod,
@@ -13,6 +20,12 @@ pub struct SamplerConfig {
     pub gbnf_grammar: String,
     pub lazy_grammar_trigger: String,
     pub grammar_root: String,
+    #[derive(Default)]
+    pub use_manual_tool_calling: bool,
+    #[derive(Default)]
+    pub manual_tool_prefix: String,
+    #[derive(Default)]
+    pub manual_tool_sequence: Vec<ManualToolCall>,
 }
 
 const JSON_GRAMMAR: &str = r#"# this default gbnf grammar forces valid json output
@@ -53,6 +66,9 @@ impl Default for SamplerConfig {
             gbnf_grammar: JSON_GRAMMAR.into(),
             lazy_grammar_trigger: "".into(),
             grammar_root: "root".into(),
+            use_manual_tool_calling: false,
+            manual_tool_prefix: "".into(),
+            manual_tool_sequence: Vec::new(),
             method: SamplerMethod::MirostatV2(MirostatV2 {
                 seed: 1234,
                 temperature: 0.8,
