@@ -992,9 +992,7 @@ impl<'a> Worker<'_, ChatWorker> {
                 let tool_rule_name = format!("tool_call_{}", tool_name);
                 for item in tool_grammar.items {
                     match item {
-                        gbnf::GrammarItem::Rule(ref rule)
-                            if rule.lhs.name == "toolcall" => 
-                        {
+                        gbnf::GrammarItem::Rule(ref rule) if rule.lhs.name == "toolcall" => {
                             // This is the rule for the <tool_call> itself. Rename it.
                             forced_tool_rules.push(format!("{} ::= {}", tool_rule_name, rule.rhs));
                         }
