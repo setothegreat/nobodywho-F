@@ -971,7 +971,7 @@ impl<'a> Worker<'_, ChatWorker> {
                         ),
                     ));
                 };
-            };
+            }
 
             // Use grammar_from_tools to get the GBNF for this *one* tool
             let tool_grammar = grammar_from_tools(&[tool.clone()]).map_err(|e| {
@@ -994,11 +994,11 @@ impl<'a> Worker<'_, ChatWorker> {
                     gbnf::GrammarItem::Rule(rule) if rule.lhs.name == "toolcall" => {
                         // This is the rule for the <tool_call> itself. Rename it.
                         forced_tool_rules.push(format!("{} ::= {}", tool_rule_name, rule.rhs));
-                        }
-                        gbnf::GrammarItem::Rule(rule) if rule.lhs.name != "superroot" => {
-                            // Add all other dependent rules (like json, ws, root, value, object, etc.)
-                            all_tool_gbnf_parts.push(rule.to_string());
-                        }
+                    }
+                    gbnf::GrammarItem::Rule(rule) if rule.lhs.name != "superroot" => {
+                        // Add all other dependent rules (like json, ws, root, value, object, etc.)
+                        all_tool_gbnf_parts.push(rule.to_string());
+                    }
                     _ => {} // Ignore the 'superroot' rule (toolcall+)
                 }
             }
