@@ -237,41 +237,36 @@ impl IResource for NobodyWhoSampler {
         )
     }
 
-    fn set_property(&mut self, property: StringName, value: Variant) -> bool {
+fn set_property(&mut self, property: StringName, value: Variant) -> bool {
         let property_str = property.to_string();
 
-        // --- Manual handling for manual_tool_sequence ---
         if property_str == "manual_tool_sequence" {
             let godot_array = VariantArray::try_from_variant(&value)
                 .expect("Unexpected type for manual_tool_sequence. Expected Array.");
 
             let mut tool_vec = Vec::new();
             for item in godot_array.iter_shared() {
-                let dict = Dictionary::try_from_variant(&item)
-                    .expect("Item in manual_tool_sequence is not a Dictionary.");
 
-                let tool_name = dict
-                    .get("tool_name")
-                    .expect("Dictionary missing 'tool_name'")
-                    .try_to::<GString>()
-                    .expect("'tool_name' is not a String.")
-                    .to_string();
-                let min_calls = dict
-                    .get("min_calls")
-                    .expect("Dictionary missing 'min_calls'")
-                    .try_to::<i32>()
-                    .expect("'min_calls' is not an Integer.");
-                let max_calls = dict
-                    .get("max_calls")
-                    .expect("Dictionary missing 'max_calls'")
-                    .try_to::<i32>()
-                    .expect("'max_calls' is not an Integer.");
+                if let Ok(dict) = Dictionary::try_from_variant(&item) {
 
-                tool_vec.push(nobodywho::sampler_config::ManualToolCall {
-                    tool_name,
-                    min_calls,
-                    max_calls,
-                });
+                    let tool_name = dict.get_or_nil("tool_name")
+                        .try_to::<GString>()
+                        .map_or(String::new(), |s| s.to_string());
+
+                    let min_calls = dict.get_or_nil("min_calls")
+                        .try_to::<i32>()
+                        .unwrap_or(0);
+
+                    let max_calls = dict.get_or_nil("max_calls")
+                        .try_to::<i32>()
+                        .unwrap_or(1);
+
+                    tool_vec.push(nobodywho::sampler_config::ManualToolCall {
+                        tool_name,
+                        min_calls,
+                        max_calls
+                    });
+                }
             }
             self.sampler_config.manual_tool_sequence = tool_vec;
             return true;
@@ -303,4 +298,3 @@ impl IResource for NobodyWhoSampler {
             }
         )
     }
-}
