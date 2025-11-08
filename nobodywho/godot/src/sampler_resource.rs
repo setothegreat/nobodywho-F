@@ -263,6 +263,7 @@ impl IResource for NobodyWhoSampler {
                 }
             }
             self.sampler_config.manual_tool_sequence = tool_vec;
+            self.base_mut().notify_property_list_changed();
             return true;
         }
 
