@@ -165,10 +165,11 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32 : NONE,
                 penalty_present: f32 : NONE,
                 use_grammar: bool : NONE,
-                gbnf_grammar: GString : MULTILINE_TEXT
+                gbnf_grammar: GString : MULTILINE_TEXT,
+                // --- ADDED NEW FIELDS ---
                 use_manual_tool_calling: bool : NONE,
                 manual_tool_prefix: GString : MULTILINE_TEXT,
-                manual_tool_sequence: Array : NONE,
+                manual_tool_sequence: Array : NONE // Godot type is Array
             },
             methods: {
                 Greedy { },
@@ -186,6 +187,21 @@ impl IResource for NobodyWhoSampler {
     }
 
     fn get_property(&self, property: StringName) -> Option<Variant> {
+        let property_str = property.to_string();
+        // --- ADD MANUAL HANDLING FOR manual_tool_sequence ---
+        if property_str == "manual_tool_sequence" {
+            let mut godot_array = Array::new();
+            for tool_call in &self.sampler_config.manual_tool_sequence {
+                let mut dict = Dictionary::new();
+                dict.set("tool_name", tool_call.tool_name.clone());
+                dict.set("min_calls", tool_call.min_calls);
+                dict.set("max_calls", tool_call.max_calls);
+                godot_array.push(dict);
+            }
+            return Some(Variant::from(godot_array));
+        }
+        // --- END ADD ---
+
         get_property!(
             self, property,
             base: {
@@ -194,20 +210,11 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32,
                 penalty_present: f32,
                 use_grammar: bool,
-                gbnf_grammar: String
-            },
-            (_, "use_manual_tool_calling") => Some(Variant::from($self.sampler_config.use_manual_tool_calling)),
-            (_, "manual_tool_prefix") => Some(Variant::from($self.sampler_config.manual_tool_prefix.clone())),
-            (_, "manual_tool_sequence") => {
-                let mut godot_array = Array::new();
-                for tool_call in &$self.sampler_config.manual_tool_sequence {
-                    let mut dict = Dictionary::new();
-                    dict.set("tool_name", tool_call.tool_name.clone());
-                    dict.set("min_calls", tool_call.min_calls);
-                    dict.set("max_calls", tool_call.max_calls);
-                    godot_array.push(dict);
-                }
-                Some(Variant::from(godot_array))
+                gbnf_grammar: String,
+                // --- ADDED SIMPLE FIELDS ---
+                use_manual_tool_calling: bool,
+                manual_tool_prefix: String
+                // manual_tool_sequence is handled above
             },
             methods: {
                 Greedy { },
@@ -225,6 +232,35 @@ impl IResource for NobodyWhoSampler {
     }
 
     fn set_property(&mut self, property: StringName, value: Variant) -> bool {
+        let property_str = property.to_string();
+        // --- ADD MANUAL HANDLING FOR manual_tool_sequence ---
+        if property_str == "manual_tool_sequence" {
+            let godot_array = Array::try_from_variant(&value)
+                .expect("Unexpected type for manual_tool_sequence. Expected Array.");
+            
+            let mut tool_vec = Vec::new();
+            for item in godot_array.iter_shared() {
+                let dict = Dictionary::try_from_variant(&item)
+                    .expect("Item in manual_tool_sequence is not a Dictionary.");
+                
+                let tool_name = dict.get("tool_name").expect("Dictionary missing 'tool_name'")
+                    .try_to::<GString>().expect("'tool_name' is not a String.").to_string();
+                let min_calls = dict.get("min_calls").expect("Dictionary missing 'min_calls'")
+                    .try_to::<i32>().expect("'min_calls' is not an Integer.");
+                let max_calls = dict.get("max_calls").expect("Dictionary missing 'max_calls'")
+                    .try_to::<i32>().expect("'max_calls' is not an Integer.");
+
+                tool_vec.push(nobodywho::sampler_config::ManualToolCall {
+                    tool_name,
+                    min_calls,
+                    max_calls
+                });
+            }
+            self.sampler_config.manual_tool_sequence = tool_vec;
+            return true;
+        }
+        // --- END ADD ---
+
         set_property!(
             self, property, value,
             base: {
@@ -233,39 +269,11 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32,
                 penalty_present: f32,
                 use_grammar: bool,
-                gbnf_grammar: String
-            },
-            (_, "use_manual_tool_calling") => {
-                $self.sampler_config.use_manual_tool_calling = bool::try_from_variant(&$value)
-                .expect("Unexpected type for use_manual_tool_calling");
-            }
-            (_, "manual_tool_prefix") => {
-                $self.sampler_config.manual_tool_prefix = String::try_from_variant(&$value)
-                .expect("Unexpected type for manual_tool_prefix");
-            }
-            (_, "manual_tool_sequence") => {
-                let godot_array = Array::try_from_variant(&$value)
-                .expect("Unexpected type for manual_tool_sequence. Expected Array.");
-
-                let mut tool_vec = Vec::new();
-                for item in godot_array.iter_shared() {
-                    let dict = Dictionary::try_from_variant(&item)
-                    .expect("Item in manual_tool_sequence is not a Dictionary.");
-
-                    let tool_name = dict.get("tool_name").expect("Dictionary missing 'tool_name'")
-                    .try_to::<GString>().expect("'tool_name' is not a String.").to_string();
-                    let min_calls = dict.get("min_calls").expect("Dictionary missing 'min_calls'")
-                    .try_to::<i32>().expect("'min_calls' is not an Integer.");
-                    let max_calls = dict.get("max_calls").expect("Dictionary missing 'max_calls'")
-                    .try_to::<i32>().expect("'max_calls' is not an Integer.");
-
-                    tool_vec.push(sampler_config::ManualToolCall {
-                        tool_name,
-                        min_calls,
-                        max_calls
-                    });
-                }
-                $self.sampler_config.manual_tool_sequence = tool_vec;
+                gbnf_grammar: String,
+                // --- ADDED SIMPLE FIELDS ---
+                use_manual_tool_calling: bool,
+                manual_tool_prefix: String
+                // manual_tool_sequence is handled above
             },
             methods: {
                 Greedy { },
