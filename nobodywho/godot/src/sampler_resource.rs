@@ -238,17 +238,16 @@ impl IResource for NobodyWhoSampler {
         )
     }
 
-fn set_property(&mut self, property: StringName, value: Variant) -> bool {
+    fn set_property(&mut self, property: StringName, value: Variant) -> bool {
         let property_str = property.to_string();
 
         // --- START: manual_tool_sequence SET ---
         if property_str == "manual_tool_sequence" {
             // Safely try to get the array. If it's not an array, use a new empty one.
-            let godot_array = VariantArray::try_from_variant(&value)
-                .unwrap_or_else(|e| {
-                    godot_warn!("Failed to parse manual_tool_sequence as Array: {}", e);
-                    VariantArray::new()
-                });
+            let godot_array = VariantArray::try_from_variant(&value).unwrap_or_else(|e| {
+                godot_warn!("Failed to parse manual_tool_sequence as Array: {}", e);
+                VariantArray::new()
+            });
 
             let mut tool_vec = Vec::new();
 
@@ -260,32 +259,31 @@ fn set_property(&mut self, property: StringName, value: Variant) -> bool {
                         min_calls: 1,
                         max_calls: 1,
                     });
-                } 
+                }
                 // Only proceed if the item is *actually* a Dictionary
                 else if let Ok(dict) = Dictionary::try_from_variant(&item) {
-
                     // --- This is the robust, panic-proof parsing ---
 
                     // Safely parse tool_name, defaulting to empty string on error
                     let tool_name = dict
                         .get_or_nil("tool_name")
-                        .try_to::<GString>()             // Returns Result<GString, ...>
-                        .map(|gstr| gstr.to_string())    // Returns Result<String, ...>
+                        .try_to::<GString>() // Returns Result<GString, ...>
+                        .map(|gstr| gstr.to_string()) // Returns Result<String, ...>
                         .unwrap_or_else(|_| String::new()); // Returns String, or default on error
 
                     // Safely parse min_calls, defaulting to 0 on error
                     let min_calls = dict
                         .get_or_nil("min_calls")
-                        .try_to::<i64>()             // Returns Result<i64, ...>
-                        .unwrap_or_else(|_| 0)       // Returns i64, or 0 on error
-                        as i32;                      
+                        .try_to::<i64>()
+                        .unwrap_or_else(|_| 0)
+                        as i32;
 
                     // Safely parse max_calls, defaulting to 1 on error
                     let max_calls = dict
                         .get_or_nil("max_calls")
-                        .try_to::<i64>()             // Returns Result<i64, ...>
-                        .unwrap_or_else(|_| 1)       // Returns i64, or 1 on error
-                        as i32;                      
+                        .try_to::<i64>()
+                        .unwrap_or_else(|_| 1)
+                        as i32;
 
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name,
@@ -294,7 +292,10 @@ fn set_property(&mut self, property: StringName, value: Variant) -> bool {
                     });
                 } else {
                     // This handles bad data: the item in the array wasn't nil, but wasn't a Dictionary.
-                    godot_warn!("Item in manual_tool_sequence was not a Dictionary: {:?}", item);
+                    godot_warn!(
+                        "Item in manual_tool_sequence was not a Dictionary: {:?}",
+                        item
+                    );
                 }
             }
             self.sampler_config.manual_tool_sequence = tool_vec;
