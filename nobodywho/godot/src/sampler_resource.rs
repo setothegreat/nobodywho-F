@@ -1,4 +1,5 @@
-use godot::global::{PropertyHint, VariantType}; // <-- Import VariantType
+use godot::global::PropertyHint;
+//use godot::builtin::VariantType;
 use godot::meta::PropertyHintInfo;
 use godot::prelude::*;
 use nobodywho::sampler_config;
@@ -97,7 +98,7 @@ macro_rules! set_property {
                 };
                 $self.to_gd()
                 .upcast::<Object>()
-                .notify_property_list_changed(); // <-- CORRECT: Only call this when method changes
+                .notify_property_list_changed();
             },
             $(
                 (_, stringify!($base_field)) => {
@@ -150,9 +151,9 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32 : NONE,
                 penalty_present: f32 : NONE,
                 use_grammar: bool : NONE,
-                gbnf_grammar: GString : MULTILINE_TEXT, // <-- Kept as GString for hint
+                gbnf_grammar: GString : MULTILINE_TEXT,
                 use_manual_tool_calling: bool : NONE,
-                manual_tool_prefix: GString : MULTILINE_TEXT // <-- Kept as GString for hint
+                manual_tool_prefix: GString : MULTILINE_TEXT
             },
             methods: {
                 Greedy { },
@@ -168,16 +169,13 @@ impl IResource for NobodyWhoSampler {
             }
         );
 
-        // --- START: CORRECTED manual_tool_sequence ---
-        // This is the idiomatic Godot-Rust way to declare an Array of Dictionaries
         properties.push(
             godot::meta::PropertyInfo::new_export::<VariantArray>("manual_tool_sequence")
-                .with_hint_info(PropertyHintInfo {
-                    hint: PropertyHint::ARRAY_TYPE,
-                    hint_string: VariantType::DICTIONARY.name(), // Hint it's an Array of Dictionaries
-                }),
+            .with_hint_info(PropertyHintInfo {
+                hint: PropertyHint::ARRAY_TYPE,
+                hint_string: GString::from(format!("{}:", 6)),
+            }),
         );
-        // --- END: CORRECTED manual_tool_sequence ---
 
         properties
     }
@@ -190,9 +188,6 @@ impl IResource for NobodyWhoSampler {
             let mut godot_array = VariantArray::new();
             for tool_call in &self.sampler_config.manual_tool_sequence {
                 let mut dict = Dictionary::new();
-                // We write out as Godot-native types.
-                // Rust String -> Godot String
-                // Rust i32 -> Godot i64
                 dict.set("tool_name", tool_call.tool_name.clone());
                 dict.set("min_calls", tool_call.min_calls as i64); // Convert to i64 for Godot
                 dict.set("max_calls", tool_call.max_calls as i64); // Convert to i64 for Godot
@@ -201,9 +196,7 @@ impl IResource for NobodyWhoSampler {
             }
             return Some(Variant::from(godot_array));
         }
-        // --- END: manual_tool_sequence GET ---
 
-        // --- START: GString GET (from previous fix) ---
         if property_str == "gbnf_grammar" {
             return Some(Variant::from(GString::from(
                 &self.sampler_config.gbnf_grammar,
@@ -214,7 +207,6 @@ impl IResource for NobodyWhoSampler {
                 &self.sampler_config.manual_tool_prefix,
             )));
         }
-        // --- END: GString GET ---
 
         get_property!(
             self, property,
@@ -224,9 +216,7 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32,
                 penalty_present: f32,
                 use_grammar: bool,
-                // gbnf_grammar: String, // <-- Handled manually
                 use_manual_tool_calling: bool
-                // manual_tool_prefix: String // <-- Handled manually
             },
             methods: {
                 Greedy { },
@@ -248,32 +238,29 @@ impl IResource for NobodyWhoSampler {
 
         // --- START: manual_tool_sequence SET ---
         if property_str == "manual_tool_sequence" {
-            let godot_array = VariantArray::try_from_variant(&value);
+            let godot_array = VariantArray::try_from_variant(&value)
+                .expect("Failed to convert Variant to VariantArray for manual_tool_sequence");
 
             let mut tool_vec = Vec::new();
 
             for item in godot_array.iter_shared() {
-                // This is your "fallback" logic, which is CORRECT.
-                // When Godot adds a new element, it's 'nil'. We replace it.
                 if item.is_nil() {
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name: "new_tool".to_string(),
-                        min_calls: 1,
-                        max_calls: 1,
+                                  min_calls: 1,
+                                  max_calls: 1,
                     });
                 }
-                // Otherwise, we parse the existing Dictionary
                 else if let Ok(dict) = Dictionary::try_from_variant(&item) {
                     let tool_name = dict
-                        .get_or_nil("tool_name")
-                        .try_to::<GString>() // Read as GString (robust)
-                        .map_or(String::new(), |s| s.to_string());
+                    .get_or_nil("tool_name")
+                    .try_to::<GString>()
+                    .map_or(String::new(), |s| s.to_string());
 
-                    // CRASH FIX: Read from Godot as i64, then cast to Rust's i32
                     let min_calls =
-                        dict.get_or_nil("min_calls").try_to::<i64>().unwrap_or(0) as i32;
+                    dict.get_or_nil("min_calls").try_to::<i64>().unwrap_or(0) as i32;
                     let max_calls =
-                        dict.get_or_nil("max_calls").try_to::<i64>().unwrap_or(1) as i32;
+                    dict.get_or_nil("max_calls").try_to::<i64>().unwrap_or(1) as i32;
 
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name,
@@ -284,12 +271,9 @@ impl IResource for NobodyWhoSampler {
             }
             self.sampler_config.manual_tool_sequence = tool_vec;
 
-            // INSPECTOR FIX: DO NOT call notify_property_list_changed() here.
             return true;
         }
-        // --- END: manual_tool_sequence SET ---
 
-        // --- START: GString SET (from previous fix) ---
         if property_str == "gbnf_grammar" {
             return match GString::try_from_variant(&value) {
                 Ok(gstring) => {
@@ -308,7 +292,6 @@ impl IResource for NobodyWhoSampler {
                 Err(_) => false,
             };
         }
-        // --- END: GString SET ---
 
         set_property!(
             self, property, value,
