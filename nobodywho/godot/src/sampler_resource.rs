@@ -174,7 +174,7 @@ impl IResource for NobodyWhoSampler {
             godot::meta::PropertyInfo::new_export::<VariantArray>("manual_tool_sequence")
                 .with_hint_info(PropertyHintInfo {
                     hint: PropertyHint::ARRAY_TYPE,
-                    hint_string: GString::from(format!("{}:", 27)),
+                    hint_string: GString::from(format!("{}:", 5)),
                 }),
         );
         // --- END: CORRECTED manual_tool_sequence ---
