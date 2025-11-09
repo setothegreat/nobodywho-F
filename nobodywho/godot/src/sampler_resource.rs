@@ -171,10 +171,10 @@ impl IResource for NobodyWhoSampler {
 
         properties.push(
             godot::meta::PropertyInfo::new_export::<VariantArray>("manual_tool_sequence")
-            .with_hint_info(PropertyHintInfo {
-                hint: PropertyHint::ARRAY_TYPE,
-                hint_string: GString::from(format!("{}:", 6)),
-            }),
+                .with_hint_info(PropertyHintInfo {
+                    hint: PropertyHint::ARRAY_TYPE,
+                    hint_string: GString::from(format!("{}:", 6)),
+                }),
         );
 
         properties
@@ -247,20 +247,19 @@ impl IResource for NobodyWhoSampler {
                 if item.is_nil() {
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name: "new_tool".to_string(),
-                                  min_calls: 1,
-                                  max_calls: 1,
+                        min_calls: 1,
+                        max_calls: 1,
                     });
-                }
-                else if let Ok(dict) = Dictionary::try_from_variant(&item) {
+                } else if let Ok(dict) = Dictionary::try_from_variant(&item) {
                     let tool_name = dict
-                    .get_or_nil("tool_name")
-                    .try_to::<GString>()
-                    .map_or(String::new(), |s| s.to_string());
+                        .get_or_nil("tool_name")
+                        .try_to::<GString>()
+                        .map_or(String::new(), |s| s.to_string());
 
                     let min_calls =
-                    dict.get_or_nil("min_calls").try_to::<i64>().unwrap_or(0) as i32;
+                        dict.get_or_nil("min_calls").try_to::<i64>().unwrap_or(0) as i32;
                     let max_calls =
-                    dict.get_or_nil("max_calls").try_to::<i64>().unwrap_or(1) as i32;
+                        dict.get_or_nil("max_calls").try_to::<i64>().unwrap_or(1) as i32;
 
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name,
