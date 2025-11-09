@@ -275,15 +275,13 @@ impl IResource for NobodyWhoSampler {
                     let min_calls = dict
                         .get_or_nil("min_calls")
                         .try_to::<i64>()
-                        .unwrap_or_else(|_| 0)
-                        as i32;
+                        .unwrap_or_else(|_| 0) as i32;
 
                     // Safely parse max_calls, defaulting to 1 on error
                     let max_calls = dict
                         .get_or_nil("max_calls")
                         .try_to::<i64>()
-                        .unwrap_or_else(|_| 1)
-                        as i32;
+                        .unwrap_or_else(|_| 1) as i32;
 
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name,
