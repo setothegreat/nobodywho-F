@@ -198,20 +198,6 @@ impl IResource for NobodyWhoSampler {
             }
             return Some(Variant::from(godot_array));
         }
-        // --- END: manual_tool_sequence GET ---
-
-        // --- START: GString GET (from previous fix) ---
-        if property_str == "gbnf_grammar" {
-            return Some(Variant::from(GString::from(
-                &self.sampler_config.gbnf_grammar,
-            )));
-        }
-        if property_str == "manual_tool_prefix" {
-            return Some(Variant::from(GString::from(
-                &self.sampler_config.manual_tool_prefix,
-            )));
-        }
-        // --- END: GString GET ---
 
         get_property!(
             self, property,
@@ -221,7 +207,9 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32,
                 penalty_present: f32,
                 use_grammar: bool,
-                use_manual_tool_calling: bool
+                gbnf_grammar: String, // <-- ADDED BACK
+                use_manual_tool_calling: bool,
+                manual_tool_prefix: String // <-- ADDED
             },
             methods: {
                 Greedy { },
@@ -243,7 +231,7 @@ impl IResource for NobodyWhoSampler {
 
         // --- START: manual_tool_sequence SET ---
         if property_str == "manual_tool_sequence" {
-            // Safely try to get the array. If it's not an array, use a new empty one.
+            // [This logic is correct and should stay]
             let godot_array = VariantArray::try_from_variant(&value).unwrap_or_else(|e| {
                 godot_warn!("Failed to parse manual_tool_sequence as Array: {}", e);
                 VariantArray::new()
@@ -253,43 +241,32 @@ impl IResource for NobodyWhoSampler {
 
             for item in godot_array.iter_shared() {
                 if item.is_nil() {
-                    // This is correct: handles the user clicking "Add Element"
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name: "new_tool".to_string(),
                         min_calls: 1,
                         max_calls: 1,
                     });
                 }
-                // Only proceed if the item is *actually* a Dictionary
                 else if let Ok(dict) = Dictionary::try_from_variant(&item) {
-                    // --- This is the robust, panic-proof parsing ---
-
-                    // Safely parse tool_name, defaulting to empty string on error
                     let tool_name = dict
                         .get_or_nil("tool_name")
-                        .try_to::<GString>() // Returns Result<GString, ...>
-                        .map(|gstr| gstr.to_string()) // Returns Result<String, ...>
-                        .unwrap_or_else(|_| String::new()); // Returns String, or default on error
-
-                    // Safely parse min_calls, defaulting to 0 on error
+                        .try_to::<GString>()
+                        .map(|gstr| gstr.to_string())
+                        .unwrap_or_else(|_| String::new());
                     let min_calls = dict
                         .get_or_nil("min_calls")
                         .try_to::<i64>()
                         .unwrap_or_else(|_| 0) as i32;
-
-                    // Safely parse max_calls, defaulting to 1 on error
                     let max_calls = dict
                         .get_or_nil("max_calls")
                         .try_to::<i64>()
                         .unwrap_or_else(|_| 1) as i32;
-
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name,
                         min_calls,
                         max_calls,
                     });
                 } else {
-                    // This handles bad data: the item in the array wasn't nil, but wasn't a Dictionary.
                     godot_warn!(
                         "Item in manual_tool_sequence was not a Dictionary: {:?}",
                         item
@@ -300,28 +277,6 @@ impl IResource for NobodyWhoSampler {
 
             return true;
         }
-        // --- END: manual_tool_sequence SET ---
-
-        // --- START: GString SET (from previous fix) ---
-        if property_str == "gbnf_grammar" {
-            return match GString::try_from_variant(&value) {
-                Ok(gstring) => {
-                    self.sampler_config.gbnf_grammar = gstring.to_string();
-                    true
-                }
-                Err(_) => false,
-            };
-        }
-        if property_str == "manual_tool_prefix" {
-            return match GString::try_from_variant(&value) {
-                Ok(gstring) => {
-                    self.sampler_config.manual_tool_prefix = gstring.to_string();
-                    true
-                }
-                Err(_) => false,
-            };
-        }
-        // --- END: GString SET ---
 
         set_property!(
             self, property, value,
@@ -331,7 +286,9 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32,
                 penalty_present: f32,
                 use_grammar: bool,
-                use_manual_tool_calling: bool
+                gbnf_grammar: String, // <-- ADDED BACK
+                use_manual_tool_calling: bool,
+                manual_tool_prefix: String // <-- ADDED
             },
             methods: {
                 Greedy { },
