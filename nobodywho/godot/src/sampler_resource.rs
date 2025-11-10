@@ -246,8 +246,7 @@ impl IResource for NobodyWhoSampler {
                         min_calls: 1,
                         max_calls: 1,
                     });
-                }
-                else if let Ok(dict) = Dictionary::try_from_variant(&item) {
+                } else if let Ok(dict) = Dictionary::try_from_variant(&item) {
                     let tool_name = dict
                         .get_or_nil("tool_name")
                         .try_to::<GString>()
