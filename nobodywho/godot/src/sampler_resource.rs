@@ -1,5 +1,4 @@
 use godot::global::PropertyHint;
-//use godot::builtin::VariantType;
 use godot::meta::PropertyHintInfo;
 use godot::prelude::*;
 use nobodywho::sampler_config;
@@ -38,7 +37,11 @@ macro_rules! property_list {
         {
             let base_properties = vec![
                 $(
-                    godot::meta::PropertyInfo::new_export::<$base_type>(stringify!($base_field)).with_hint_info(PropertyHintInfo { hint: PropertyHint::$property_hint, hint_string: GString::new() }),
+                    godot::meta::PropertyInfo::new_export::<$base_type>(stringify!($base_field))
+                        .with_hint_info(PropertyHintInfo { 
+                            hint: PropertyHint::$property_hint, 
+                            hint_string: GString::new() 
+                        }),
                 )*
             ];
             let method_properties = match $self.method {
@@ -70,7 +73,8 @@ macro_rules! get_property {
             )*
             $(
                 $(
-                    (sampler_config::SamplerMethod::$variant(conf), stringify!($variant_field)) => Some(Variant::from(conf.$variant_field)),
+                    (sampler_config::SamplerMethod::$variant(conf), stringify!($variant_field)) => 
+                        Some(Variant::from(conf.$variant_field)),
                 )*
             )*
             _ => None
@@ -87,7 +91,8 @@ macro_rules! set_property {
     ) => {{
         match (&mut $self.sampler_config.method, $property.to_string().as_str()) {
             (_, "method") => {
-                let new_method = SamplerMethodName::try_from_variant(&$value).expect("Unexpected: Got invalid sampler method");
+                let new_method = SamplerMethodName::try_from_variant(&$value)
+                    .expect("Unexpected: Got invalid sampler method");
                 $self.method = new_method;
                 $self.sampler_config.method = match new_method {
                     $(
@@ -97,24 +102,26 @@ macro_rules! set_property {
                     )*
                 };
                 $self.to_gd()
-                .upcast::<Object>()
-                .notify_property_list_changed(); // <-- CORRECT: Only call this when method changes
+                    .upcast::<Object>()
+                    .notify_property_list_changed();
             },
             $(
                 (_, stringify!($base_field)) => {
                     $self.sampler_config.$base_field = <$base_type>::try_from_variant(&$value)
-                    .expect(format!("Unexpected type for {}", stringify!($base_field)).as_str());
+                        .expect(format!("Unexpected type for {}", stringify!($base_field)).as_str());
                 }
             )*
             $(
                 $(
                     (sampler_config::SamplerMethod::$variant(conf), stringify!($variant_field)) => {
                         conf.$variant_field = <$variant_type>::try_from_variant(&$value)
-                        .expect(format!("Unexpected type for {}", stringify!($variant_field)).as_str());
+                            .expect(format!("Unexpected type for {}", stringify!($variant_field)).as_str());
                     }
                 )*
             )*
-            (variant, field_name) => godot_warn!("Bad combination of method variant and property name: {:?} {:?}", variant, field_name),
+            (variant, field_name) => {
+                godot_warn!("Bad combination of method variant and property name: {:?} {:?}", variant, field_name);
+            },
         }
         true
     }};
@@ -151,9 +158,9 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32 : NONE,
                 penalty_present: f32 : NONE,
                 use_grammar: bool : NONE,
-                gbnf_grammar: GString : MULTILINE_TEXT, // <-- Kept as GString for hint
+                gbnf_grammar: GString : MULTILINE_TEXT,
                 use_manual_tool_calling: bool : NONE,
-                manual_tool_prefix: GString : MULTILINE_TEXT // <-- Kept as GString for hint
+                manual_tool_prefix: GString : MULTILINE_TEXT
             },
             methods: {
                 Greedy { },
@@ -169,15 +176,16 @@ impl IResource for NobodyWhoSampler {
             }
         );
 
-        // --- START: CORRECTED manual_tool_sequence ---
+        // FIXED: Proper array type hint for Dictionary arrays
+        // Format is "type_hint:hint_string" where type_hint is the VariantType enum value
+        // 27 = TYPE_DICTIONARY
         properties.push(
-            godot::meta::PropertyInfo::new_export::<VariantArray>("manual_tool_sequence")
+            godot::meta::PropertyInfo::new_export::<Array<Dictionary>>("manual_tool_sequence")
                 .with_hint_info(PropertyHintInfo {
                     hint: PropertyHint::ARRAY_TYPE,
-                    hint_string: GString::from(format!("{}:", 27)),
+                    hint_string: GString::from("27:"), // Dictionary type
                 }),
         );
-        // --- END: CORRECTED manual_tool_sequence ---
 
         properties
     }
@@ -185,18 +193,16 @@ impl IResource for NobodyWhoSampler {
     fn get_property(&self, property: StringName) -> Option<Variant> {
         let property_str = property.to_string();
 
-        // --- START: manual_tool_sequence GET ---
         if property_str == "manual_tool_sequence" {
-            let mut godot_array = VariantArray::new();
+            let mut godot_array = Array::<Dictionary>::new();
             for tool_call in &self.sampler_config.manual_tool_sequence {
                 let mut dict = Dictionary::new();
                 dict.set("tool_name", tool_call.tool_name.clone());
-                dict.set("min_calls", tool_call.min_calls as i64); // Convert to i64 for Godot
-                dict.set("max_calls", tool_call.max_calls as i64); // Convert to i64 for Godot
-
-                godot_array.push(&Variant::from(dict));
+                dict.set("min_calls", tool_call.min_calls as i64);
+                dict.set("max_calls", tool_call.max_calls as i64);
+                godot_array.push(&dict);
             }
-            return Some(Variant::from(godot_array));
+            return Some(godot_array.to_variant());
         }
 
         get_property!(
@@ -207,9 +213,9 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32,
                 penalty_present: f32,
                 use_grammar: bool,
-                gbnf_grammar: String, // <-- ADDED BACK
+                gbnf_grammar: String,
                 use_manual_tool_calling: bool,
-                manual_tool_prefix: String // <-- ADDED
+                manual_tool_prefix: String
             },
             methods: {
                 Greedy { },
@@ -229,52 +235,86 @@ impl IResource for NobodyWhoSampler {
     fn set_property(&mut self, property: StringName, value: Variant) -> bool {
         let property_str = property.to_string();
 
-        // --- START: manual_tool_sequence SET ---
         if property_str == "manual_tool_sequence" {
-            // [This logic is correct and should stay]
-            let godot_array = VariantArray::try_from_variant(&value).unwrap_or_else(|e| {
-                godot_warn!("Failed to parse manual_tool_sequence as Array: {}", e);
-                VariantArray::new()
-            });
+            // Try to convert to Array<Dictionary> first (type-safe)
+            if let Ok(godot_array) = Array::<Dictionary>::try_from_variant(&value) {
+                let mut tool_vec = Vec::new();
 
-            let mut tool_vec = Vec::new();
-
-            for item in godot_array.iter_shared() {
-                if item.is_nil() {
-                    tool_vec.push(nobodywho::sampler_config::ManualToolCall {
-                        tool_name: "new_tool".to_string(),
-                        min_calls: 1,
-                        max_calls: 1,
-                    });
-                } else if let Ok(dict) = Dictionary::try_from_variant(&item) {
+                for dict in godot_array.iter_shared() {
                     let tool_name = dict
                         .get_or_nil("tool_name")
                         .try_to::<GString>()
                         .map(|gstr| gstr.to_string())
-                        .unwrap_or_else(|_| String::new());
+                        .unwrap_or_else(|_| "new_tool".to_string());
+                    
                     let min_calls = dict
                         .get_or_nil("min_calls")
                         .try_to::<i64>()
-                        .unwrap_or_else(|_| 0) as i32;
+                        .unwrap_or(1) as i32;
+                    
                     let max_calls = dict
                         .get_or_nil("max_calls")
                         .try_to::<i64>()
-                        .unwrap_or_else(|_| 1) as i32;
+                        .unwrap_or(1) as i32;
+                    
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name,
                         min_calls,
                         max_calls,
                     });
-                } else {
-                    godot_warn!(
-                        "Item in manual_tool_sequence was not a Dictionary: {:?}",
-                        item
-                    );
                 }
+                
+                self.sampler_config.manual_tool_sequence = tool_vec;
+                return true;
             }
-            self.sampler_config.manual_tool_sequence = tool_vec;
+            
+            // Fallback to VariantArray for compatibility
+            if let Ok(godot_array) = VariantArray::try_from_variant(&value) {
+                let mut tool_vec = Vec::new();
 
-            return true;
+                for item in godot_array.iter_shared() {
+                    if item.is_nil() {
+                        tool_vec.push(nobodywho::sampler_config::ManualToolCall {
+                            tool_name: "new_tool".to_string(),
+                            min_calls: 1,
+                            max_calls: 1,
+                        });
+                    } else if let Ok(dict) = Dictionary::try_from_variant(&item) {
+                        let tool_name = dict
+                            .get_or_nil("tool_name")
+                            .try_to::<GString>()
+                            .map(|gstr| gstr.to_string())
+                            .unwrap_or_else(|_| "new_tool".to_string());
+                        
+                        let min_calls = dict
+                            .get_or_nil("min_calls")
+                            .try_to::<i64>()
+                            .unwrap_or(1) as i32;
+                        
+                        let max_calls = dict
+                            .get_or_nil("max_calls")
+                            .try_to::<i64>()
+                            .unwrap_or(1) as i32;
+                        
+                        tool_vec.push(nobodywho::sampler_config::ManualToolCall {
+                            tool_name,
+                            min_calls,
+                            max_calls,
+                        });
+                    } else {
+                        godot_warn!(
+                            "Item in manual_tool_sequence was not a Dictionary: {:?}",
+                            item
+                        );
+                    }
+                }
+                
+                self.sampler_config.manual_tool_sequence = tool_vec;
+                return true;
+            }
+            
+            godot_warn!("Failed to parse manual_tool_sequence as Array");
+            return false;
         }
 
         set_property!(
@@ -285,9 +325,9 @@ impl IResource for NobodyWhoSampler {
                 penalty_freq: f32,
                 penalty_present: f32,
                 use_grammar: bool,
-                gbnf_grammar: String, // <-- ADDED BACK
+                gbnf_grammar: String,
                 use_manual_tool_calling: bool,
-                manual_tool_prefix: String // <-- ADDED
+                manual_tool_prefix: String
             },
             methods: {
                 Greedy { },

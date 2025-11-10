@@ -9,6 +9,56 @@ pub struct ManualToolCall {
     pub max_calls: i32,
 }
 
+// ADD VALIDATION HERE
+impl ManualToolCall {
+    /// Creates a new ManualToolCall with validation
+    pub fn new(tool_name: String, min_calls: i32, max_calls: i32) -> Result<Self, String> {
+        // Validate min_calls
+        if min_calls < 0 {
+            return Err(format!(
+                "min_calls must be >= 0, got {}",
+                min_calls
+            ));
+        }
+
+        // Validate max_calls
+        if max_calls < -1 {
+            return Err(format!(
+                "max_calls must be >= -1 (where -1 means unlimited), got {}",
+                max_calls
+            ));
+        }
+
+        // Validate relationship between min and max
+        if max_calls != -1 && max_calls < min_calls {
+            return Err(format!(
+                "max_calls ({}) must be >= min_calls ({}) or -1 for unlimited",
+                max_calls, min_calls
+            ));
+        }
+
+        // Validate tool name is not empty
+        if tool_name.trim().is_empty() {
+            return Err("tool_name cannot be empty".to_string());
+        }
+
+        Ok(Self {
+            tool_name,
+            min_calls,
+            max_calls,
+        })
+    }
+
+    /// Creates with default values (useful for testing)
+    pub fn default_with_name(tool_name: String) -> Self {
+        Self {
+            tool_name,
+            min_calls: 1,
+            max_calls: 1,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SamplerConfig {
     pub method: SamplerMethod,
