@@ -949,24 +949,29 @@ impl<'a> Worker<'_, ChatWorker> {
         let mut pass_1_sampler = sampler.clone();
 
         // DEBUG: Log sampler configuration
-        debug!("say() called with use_manual_tool_calling: {}", 
-            pass_1_sampler.use_manual_tool_calling);
-        debug!("say() manual_tool_sequence length: {}", 
-            pass_1_sampler.manual_tool_sequence.len());
+        debug!(
+            "say() called with use_manual_tool_calling: {}",
+            pass_1_sampler.use_manual_tool_calling
+        );
+        debug!(
+            "say() manual_tool_sequence length: {}",
+            pass_1_sampler.manual_tool_sequence.len()
+        );
 
         if pass_1_sampler.use_manual_tool_calling {
             debug!("Using manual tool calling configuration.");
-            debug!("Manual tool sequence: {:?}", pass_1_sampler.manual_tool_sequence);
+            debug!(
+                "Manual tool sequence: {:?}",
+                pass_1_sampler.manual_tool_sequence
+            );
 
             // Validate that we have tools configured
             if pass_1_sampler.manual_tool_sequence.is_empty() {
                 error!("use_manual_tool_calling is true but manual_tool_sequence is empty!");
                 return Err(SayError::WrappedResponseError(
-                    WrappedResponseError::InferenceError(
-                        InferenceError::GenerateResponseError(
-                            GenerateResponseError::InvalidSamplerConfig,
-                        ),
-                    ),
+                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
+                        GenerateResponseError::InvalidSamplerConfig,
+                    )),
                 ));
             }
 
@@ -977,11 +982,13 @@ impl<'a> Worker<'_, ChatWorker> {
             for tool_call_config in &pass_1_sampler.manual_tool_sequence {
                 let tool_name = &tool_call_config.tool_name;
                 debug!("Processing manual tool call for: {}", tool_name);
-                
+
                 let Some(tool) = self.extra.tools.iter().find(|t| t.name == *tool_name) else {
                     error!("Manual Tool Call: Tool '{}' not found.", tool_name);
-                    error!("Available tools: {:?}", 
-                        self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>());
+                    error!(
+                        "Available tools: {:?}",
+                        self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>()
+                    );
                     return Err(SayError::WrappedResponseError(
                         WrappedResponseError::InferenceError(
                             InferenceError::GenerateResponseError(
@@ -1008,17 +1015,19 @@ impl<'a> Worker<'_, ChatWorker> {
 
                 let tool_rule_name = format!("tool_call_{}", tool_name);
                 debug!("Generated grammar for tool: {}", tool_name);
-                
+
                 // Extract rules - FIXED to avoid double iteration
                 for grammar_item in tool_grammar.items {
                     match grammar_item {
                         gbnf::GrammarItem::Rule(rule) => {
                             if rule.lhs.name == "toolcall" {
                                 // This is the rule for the <tool_call> itself. Rename it.
-                                forced_tool_rules.push(format!("{} ::= {}", tool_rule_name, rule.rhs));
+                                forced_tool_rules
+                                    .push(format!("{} ::= {}", tool_rule_name, rule.rhs));
                             } else if rule.lhs.name != "superroot" {
                                 // Add all other dependent rules
-                                all_tool_gbnf_parts.push(format!("{} ::= {}", rule.lhs.name, rule.rhs));
+                                all_tool_gbnf_parts
+                                    .push(format!("{} ::= {}", rule.lhs.name, rule.rhs));
                             }
                         }
                         // Handle other GrammarItem variants
@@ -1043,7 +1052,10 @@ impl<'a> Worker<'_, ChatWorker> {
 
             // Add the prefix (if any)
             if !pass_1_sampler.manual_tool_prefix.is_empty() {
-                debug!("Adding manual tool prefix: '{}'", pass_1_sampler.manual_tool_prefix);
+                debug!(
+                    "Adding manual tool prefix: '{}'",
+                    pass_1_sampler.manual_tool_prefix
+                );
                 let escaped_prefix = format!("{:?}", pass_1_sampler.manual_tool_prefix);
                 root_rule.push_str(&escaped_prefix);
                 root_rule.push(' ');
@@ -1081,8 +1093,15 @@ impl<'a> Worker<'_, ChatWorker> {
                     repetition_str = String::new(); // Default to 1
                 }
 
-                debug!("Tool '{}' repetition: {}", tool_call_config.tool_name, 
-                    if repetition_str.is_empty() { "exactly 1" } else { &repetition_str });
+                debug!(
+                    "Tool '{}' repetition: {}",
+                    tool_call_config.tool_name,
+                    if repetition_str.is_empty() {
+                        "exactly 1"
+                    } else {
+                        &repetition_str
+                    }
+                );
 
                 tool_sequence_rules.push(format!("( {} ){}", tool_rule_name, repetition_str));
             }
@@ -1096,16 +1115,17 @@ impl<'a> Worker<'_, ChatWorker> {
                 all_tool_gbnf_parts.join("\n")
             );
 
-            debug!("Generated Manual Tool GBNF (first 500 chars):\n{}", 
-                &final_gbnf[..std::cmp::min(500, final_gbnf.len())]);
+            debug!(
+                "Generated Manual Tool GBNF (first 500 chars):\n{}",
+                &final_gbnf[..std::cmp::min(500, final_gbnf.len())]
+            );
 
             // 4. Set the pass_1_sampler to use this new GBNF
             pass_1_sampler.use_grammar = true;
             pass_1_sampler.gbnf_grammar = final_gbnf;
             pass_1_sampler.grammar_root = "root".to_string();
-            
+
             debug!("Manual tool calling configuration complete");
-            
         } else if !pass_1_sampler.use_grammar {
             // Manual calling is off, AND user grammar is off. Use default tool grammar.
             debug!("Using default tool grammar.");

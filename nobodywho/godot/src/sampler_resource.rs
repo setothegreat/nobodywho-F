@@ -38,9 +38,9 @@ macro_rules! property_list {
             let base_properties = vec![
                 $(
                     godot::meta::PropertyInfo::new_export::<$base_type>(stringify!($base_field))
-                        .with_hint_info(PropertyHintInfo { 
-                            hint: PropertyHint::$property_hint, 
-                            hint_string: GString::new() 
+                        .with_hint_info(PropertyHintInfo {
+                            hint: PropertyHint::$property_hint,
+                            hint_string: GString::new()
                         }),
                 )*
             ];
@@ -73,7 +73,7 @@ macro_rules! get_property {
             )*
             $(
                 $(
-                    (sampler_config::SamplerMethod::$variant(conf), stringify!($variant_field)) => 
+                    (sampler_config::SamplerMethod::$variant(conf), stringify!($variant_field)) =>
                         Some(Variant::from(conf.$variant_field)),
                 )*
             )*
@@ -246,28 +246,24 @@ impl IResource for NobodyWhoSampler {
                         .try_to::<GString>()
                         .map(|gstr| gstr.to_string())
                         .unwrap_or_else(|_| "new_tool".to_string());
-                    
-                    let min_calls = dict
-                        .get_or_nil("min_calls")
-                        .try_to::<i64>()
-                        .unwrap_or(1) as i32;
-                    
-                    let max_calls = dict
-                        .get_or_nil("max_calls")
-                        .try_to::<i64>()
-                        .unwrap_or(1) as i32;
-                    
+
+                    let min_calls =
+                        dict.get_or_nil("min_calls").try_to::<i64>().unwrap_or(1) as i32;
+
+                    let max_calls =
+                        dict.get_or_nil("max_calls").try_to::<i64>().unwrap_or(1) as i32;
+
                     tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                         tool_name,
                         min_calls,
                         max_calls,
                     });
                 }
-                
+
                 self.sampler_config.manual_tool_sequence = tool_vec;
                 return true;
             }
-            
+
             // Fallback to VariantArray for compatibility
             if let Ok(godot_array) = VariantArray::try_from_variant(&value) {
                 let mut tool_vec = Vec::new();
@@ -285,17 +281,13 @@ impl IResource for NobodyWhoSampler {
                             .try_to::<GString>()
                             .map(|gstr| gstr.to_string())
                             .unwrap_or_else(|_| "new_tool".to_string());
-                        
-                        let min_calls = dict
-                            .get_or_nil("min_calls")
-                            .try_to::<i64>()
-                            .unwrap_or(1) as i32;
-                        
-                        let max_calls = dict
-                            .get_or_nil("max_calls")
-                            .try_to::<i64>()
-                            .unwrap_or(1) as i32;
-                        
+
+                        let min_calls =
+                            dict.get_or_nil("min_calls").try_to::<i64>().unwrap_or(1) as i32;
+
+                        let max_calls =
+                            dict.get_or_nil("max_calls").try_to::<i64>().unwrap_or(1) as i32;
+
                         tool_vec.push(nobodywho::sampler_config::ManualToolCall {
                             tool_name,
                             min_calls,
@@ -308,11 +300,11 @@ impl IResource for NobodyWhoSampler {
                         );
                     }
                 }
-                
+
                 self.sampler_config.manual_tool_sequence = tool_vec;
                 return true;
             }
-            
+
             godot_warn!("Failed to parse manual_tool_sequence as Array");
             return false;
         }

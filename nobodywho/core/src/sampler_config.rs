@@ -15,10 +15,7 @@ impl ManualToolCall {
     pub fn new(tool_name: String, min_calls: i32, max_calls: i32) -> Result<Self, String> {
         // Validate min_calls
         if min_calls < 0 {
-            return Err(format!(
-                "min_calls must be >= 0, got {}",
-                min_calls
-            ));
+            return Err(format!("min_calls must be >= 0, got {}", min_calls));
         }
 
         // Validate max_calls
