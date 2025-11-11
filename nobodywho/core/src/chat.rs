@@ -949,24 +949,29 @@ impl<'a> Worker<'_, ChatWorker> {
         let mut pass_1_sampler = sampler.clone();
 
         // DEBUG: Log sampler configuration
-        debug!("say() called with use_manual_tool_calling: {}", 
-            pass_1_sampler.use_manual_tool_calling);
-        debug!("say() manual_tool_sequence length: {}", 
-            pass_1_sampler.manual_tool_sequence.len());
+        debug!(
+            "say() called with use_manual_tool_calling: {}",
+            pass_1_sampler.use_manual_tool_calling
+        );
+        debug!(
+            "say() manual_tool_sequence length: {}",
+            pass_1_sampler.manual_tool_sequence.len()
+        );
 
         if pass_1_sampler.use_manual_tool_calling {
             debug!("Using manual tool calling configuration.");
-            debug!("Manual tool sequence: {:?}", pass_1_sampler.manual_tool_sequence);
+            debug!(
+                "Manual tool sequence: {:?}",
+                pass_1_sampler.manual_tool_sequence
+            );
 
             // Validate that we have tools configured
             if pass_1_sampler.manual_tool_sequence.is_empty() {
                 error!("use_manual_tool_calling is true but manual_tool_sequence is empty!");
                 return Err(SayError::WrappedResponseError(
-                    WrappedResponseError::InferenceError(
-                        InferenceError::GenerateResponseError(
-                            GenerateResponseError::InvalidSamplerConfig,
-                        ),
-                    ),
+                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
+                        GenerateResponseError::InvalidSamplerConfig,
+                    )),
                 ));
             }
 
@@ -974,11 +979,9 @@ impl<'a> Worker<'_, ChatWorker> {
             if self.extra.tools.is_empty() {
                 error!("Manual tool calling enabled but no tools are registered!");
                 return Err(SayError::WrappedResponseError(
-                    WrappedResponseError::InferenceError(
-                        InferenceError::GenerateResponseError(
-                            GenerateResponseError::InvalidSamplerConfig,
-                        ),
-                    ),
+                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
+                        GenerateResponseError::InvalidSamplerConfig,
+                    )),
                 ));
             }
 
@@ -987,11 +990,13 @@ impl<'a> Worker<'_, ChatWorker> {
             for tool_call_config in &pass_1_sampler.manual_tool_sequence {
                 let tool_name = &tool_call_config.tool_name;
                 debug!("Looking for tool: {}", tool_name);
-                
+
                 let Some(tool) = self.extra.tools.iter().find(|t| t.name == *tool_name) else {
                     error!("Manual Tool Call: Tool '{}' not found.", tool_name);
-                    error!("Available tools: {:?}", 
-                        self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>());
+                    error!(
+                        "Available tools: {:?}",
+                        self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>()
+                    );
                     return Err(SayError::WrappedResponseError(
                         WrappedResponseError::InferenceError(
                             InferenceError::GenerateResponseError(
@@ -1021,7 +1026,7 @@ impl<'a> Worker<'_, ChatWorker> {
             })?;
 
             // Build custom grammar using gbnf crate directly
-            let mut custom_grammar = gbnf::Grammar { 
+            let mut custom_grammar = gbnf::Grammar {
                 items: Vec::new(),
                 recurring_items: Default::default(), // Initialize recurring_items field
             };
@@ -1038,7 +1043,7 @@ impl<'a> Worker<'_, ChatWorker> {
                     },
                     gbnf::RepetitionType::One,
                 ));
-                
+
                 // Add whitespace after prefix
                 root_production_items.push(gbnf::ProductionItem::NonTerminal(
                     gbnf::NonTerminalSymbol { name: "ws".into() },
@@ -1065,12 +1070,16 @@ impl<'a> Worker<'_, ChatWorker> {
                         // For N or more (e.g., {2,}), we need to add N required toolcalls + one with *
                         for _ in 0..min {
                             root_production_items.push(gbnf::ProductionItem::NonTerminal(
-                                gbnf::NonTerminalSymbol { name: "toolcall".into() },
+                                gbnf::NonTerminalSymbol {
+                                    name: "toolcall".into(),
+                                },
                                 gbnf::RepetitionType::One,
                             ));
                         }
                         root_production_items.push(gbnf::ProductionItem::NonTerminal(
-                            gbnf::NonTerminalSymbol { name: "toolcall".into() },
+                            gbnf::NonTerminalSymbol {
+                                name: "toolcall".into(),
+                            },
                             gbnf::RepetitionType::ZeroOrMore,
                         ));
                         continue;
@@ -1079,35 +1088,48 @@ impl<'a> Worker<'_, ChatWorker> {
                     // Between N and M: add N required + (M-N) optional
                     for _ in 0..min {
                         root_production_items.push(gbnf::ProductionItem::NonTerminal(
-                            gbnf::NonTerminalSymbol { name: "toolcall".into() },
+                            gbnf::NonTerminalSymbol {
+                                name: "toolcall".into(),
+                            },
                             gbnf::RepetitionType::One,
                         ));
                     }
                     for _ in min..max {
                         root_production_items.push(gbnf::ProductionItem::NonTerminal(
-                            gbnf::NonTerminalSymbol { name: "toolcall".into() },
+                            gbnf::NonTerminalSymbol {
+                                name: "toolcall".into(),
+                            },
                             gbnf::RepetitionType::ZeroOrOne,
                         ));
                     }
                     continue;
                 } else {
-                    warn!("Invalid min/max for tool '{}', defaulting to 1", tool_call_config.tool_name);
+                    warn!(
+                        "Invalid min/max for tool '{}', defaulting to 1",
+                        tool_call_config.tool_name
+                    );
                     gbnf::RepetitionType::One
                 };
 
                 root_production_items.push(gbnf::ProductionItem::NonTerminal(
-                    gbnf::NonTerminalSymbol { name: "toolcall".into() },
+                    gbnf::NonTerminalSymbol {
+                        name: "toolcall".into(),
+                    },
                     repetition,
                 ));
             }
 
             // Create the custom root rule
-            custom_grammar.items.push(gbnf::GrammarItem::Rule(gbnf::Rule {
-                lhs: gbnf::NonTerminalSymbol { name: "root".into() },
-                rhs: gbnf::Production {
-                    items: root_production_items,
-                },
-            }));
+            custom_grammar
+                .items
+                .push(gbnf::GrammarItem::Rule(gbnf::Rule {
+                    lhs: gbnf::NonTerminalSymbol {
+                        name: "root".into(),
+                    },
+                    rhs: gbnf::Production {
+                        items: root_production_items,
+                    },
+                }));
 
             // 2. Copy all rules from base_grammar EXCEPT root and superroot
             //    Rename the original "root" to "tool_json_schema" to avoid circular reference
@@ -1116,39 +1138,53 @@ impl<'a> Worker<'_, ChatWorker> {
                     gbnf::GrammarItem::Rule(rule) => {
                         if rule.lhs.name == "root" {
                             // Rename the JSON schema root to avoid circular reference
-                            custom_grammar.items.push(gbnf::GrammarItem::Rule(gbnf::Rule {
-                                lhs: gbnf::NonTerminalSymbol { name: "tool_json_schema".into() },
-                                rhs: rule.rhs,
-                            }));
+                            custom_grammar
+                                .items
+                                .push(gbnf::GrammarItem::Rule(gbnf::Rule {
+                                    lhs: gbnf::NonTerminalSymbol {
+                                        name: "tool_json_schema".into(),
+                                    },
+                                    rhs: rule.rhs,
+                                }));
                         } else if rule.lhs.name == "toolcall" {
                             // Modify toolcall to reference tool_json_schema instead of root
                             let ws = gbnf::ProductionItem::NonTerminal(
                                 gbnf::NonTerminalSymbol { name: "ws".into() },
                                 gbnf::RepetitionType::One,
                             );
-                            
-                            custom_grammar.items.push(gbnf::GrammarItem::Rule(gbnf::Rule {
-                                lhs: gbnf::NonTerminalSymbol { name: "toolcall".into() },
-                                rhs: gbnf::Production {
-                                    items: vec![
-                                        gbnf::ProductionItem::Terminal(
-                                            gbnf::TerminalSymbol { value: "<tool_call>".into() },
-                                            gbnf::RepetitionType::One,
-                                        ),
-                                        ws.clone(),
-                                        gbnf::ProductionItem::NonTerminal(
-                                            gbnf::NonTerminalSymbol { name: "tool_json_schema".into() },
-                                            gbnf::RepetitionType::One,
-                                        ),
-                                        ws.clone(),
-                                        gbnf::ProductionItem::Terminal(
-                                            gbnf::TerminalSymbol { value: "</tool_call>".into() },
-                                            gbnf::RepetitionType::One,
-                                        ),
-                                        ws.clone(),
-                                    ],
-                                },
-                            }));
+
+                            custom_grammar
+                                .items
+                                .push(gbnf::GrammarItem::Rule(gbnf::Rule {
+                                    lhs: gbnf::NonTerminalSymbol {
+                                        name: "toolcall".into(),
+                                    },
+                                    rhs: gbnf::Production {
+                                        items: vec![
+                                            gbnf::ProductionItem::Terminal(
+                                                gbnf::TerminalSymbol {
+                                                    value: "<tool_call>".into(),
+                                                },
+                                                gbnf::RepetitionType::One,
+                                            ),
+                                            ws.clone(),
+                                            gbnf::ProductionItem::NonTerminal(
+                                                gbnf::NonTerminalSymbol {
+                                                    name: "tool_json_schema".into(),
+                                                },
+                                                gbnf::RepetitionType::One,
+                                            ),
+                                            ws.clone(),
+                                            gbnf::ProductionItem::Terminal(
+                                                gbnf::TerminalSymbol {
+                                                    value: "</tool_call>".into(),
+                                                },
+                                                gbnf::RepetitionType::One,
+                                            ),
+                                            ws.clone(),
+                                        ],
+                                    },
+                                }));
                         } else if rule.lhs.name != "superroot" {
                             // Copy all other rules as-is
                             custom_grammar.items.push(gbnf::GrammarItem::Rule(rule));
@@ -1158,15 +1194,20 @@ impl<'a> Worker<'_, ChatWorker> {
                         custom_grammar.items.push(gbnf::GrammarItem::LineBreak);
                     }
                     gbnf::GrammarItem::Comment(comment) => {
-                        custom_grammar.items.push(gbnf::GrammarItem::Comment(comment));
+                        custom_grammar
+                            .items
+                            .push(gbnf::GrammarItem::Comment(comment));
                     }
                 }
             }
 
             let final_grammar = custom_grammar.to_string();
-            
+
             debug!("Generated GBNF length: {} chars", final_grammar.len());
-            debug!("First 300 chars:\n{}", &final_grammar[..final_grammar.len().min(300)]);
+            debug!(
+                "First 300 chars:\n{}",
+                &final_grammar[..final_grammar.len().min(300)]
+            );
             trace!("Complete GBNF:\n{}", final_grammar);
 
             // Set the grammar
@@ -1176,7 +1217,6 @@ impl<'a> Worker<'_, ChatWorker> {
             pass_1_sampler.lazy_grammar_trigger = String::new(); // No lazy trigger for forced calls
 
             debug!("Manual tool calling configuration complete");
-            
         } else if !pass_1_sampler.use_grammar {
             // Default tool grammar behavior (from original code)
             debug!("Using default tool grammar.");
@@ -1243,7 +1283,7 @@ impl<'a> Worker<'_, ChatWorker> {
                 tool_call_begin.into(),
             )?;
         }
-        
+
         debug_assert!(!response.contains(tool_call_begin));
         self.extra.chat_state.add_assistant_message(response);
 
