@@ -991,17 +991,16 @@ impl<'a> Worker<'_, ChatWorker> {
                 // Generate the tool grammar using existing method
                 let tool_call_schema = serde_json::json!({
                     "oneOf": self.extra.tools.iter().map(|tool| {
-                        serde_json::json!({
-                            "type": "object",
-                            "properties": {
-                                "name": {
-                                    "type": "string",
-                                    "enum": [tool.name.clone()]
+                        serde_json::json!(
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "name": { "const": tool.name, },
+                                    "arguments": tool.json_schema
                                 },
-                                "arguments": tool.json_schema.clone()
-                            },
-                            "required": ["name", "arguments"]
-                        })
+                                "required": ["name", "arguments"]
+                            }
+                        )
                     }).collect::<Vec<_>>()
                 });
 
