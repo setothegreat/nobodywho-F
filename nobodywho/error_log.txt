@@ -1,0 +1,44 @@
+2025-11-11T20:34:43.434665Z  INFO nobodywho::chat: Worker writing until done
+parse: error parsing grammar: expecting ::= at _json ::= symbol-1-oneof-0 | symbol-5-oneof-1 | symbol-12-oneof-2 | symbol-18-oneof-3
+toolcall ::= "<tool_call>" ws tool_json ws "</tool_call>" ws
+
+
+root ::= "<think>Okay, I need to use the remember tool to check my memory to before proceeding</think>" ws toolcall+
+################################################
+# DYNAMICALLY GENERATED JSON-SCHEMA GRAMMAR
+################################################
+
+symbol2-name-value ::= "\"remember\""
+symbol4-query-value ::= string ws
+symbol3-arguments-value ::= "{" ws "\"query\"" ws ":" ws symbol4-query-value "}" ws
+symbol-1-oneof-0 ::= "{" ws "\"name\"" ws ":" ws symbol2-name-value "," ws "\"arguments\"" ws ":" ws symbol3-arguments-value "}" ws
+symbol6-name-value ::= "\"commit_to_memory\""
+symbol8-memoryType-value ::= "\"World History\"" | "\"Locations in City\"" | "\"Known Individuals\"" | "\"Recent News\"" | "\"Personal Interactions\"" | "\"Miscellaneous\""
+symbol9-memoryDetails-value ::= string ws
+symbol10-memoryFeelings-value ::= string ws
+symbol11-memoryImportance-value ::= "\"Very Low\"" | "\"Low\"" | "\"Moderate\"" | "\"High\"" | "\"Very High\"" | "\"Extremely High\""
+symbol7-arguments-value ::= "{" ws "\"memoryType\"" ws ":" ws symbol8-memoryType-value "," ws "\"memoryDetails\"" ws ":" ws symbol9-memoryDetails-value "," ws "\"memoryFeelings\"" ws ":" ws symbol10-memoryFeelings-value "," ws "\"memoryImportance\"" ws ":" ws symbol11-memoryImportance-value "}" ws
+symbol-5-oneof-1 ::= "{" ws "\"name\"" ws ":" ws symbol6-name-value "," ws "\"arguments\"" ws ":" ws symbol7-arguments-value "}" ws
+symbol13-name-value ::= "\"end_conversation\""
+symbol15-wayToEnd-value ::= "\"Friendly - Improve Relationship with User\"" | "\"Neutral\"" | "\"Hostile - Degrade Relationship with User\"" | "\"Hostile - Refuse to Speak with User Again\"" | "\"Hostile - Initiate Combat with User\"" | "\"Hostile - Flee from User\""
+symbol16-relationshipValue-value ::= integer ws
+symbol17-speakValue-value ::= integer ws
+symbol14-arguments-value ::= "{" ws "\"wayToEnd\"" ws ":" ws symbol15-wayToEnd-value "," ws "\"relationshipValue\"" ws ":" ws symbol16-relationshipValue-value "," ws "\"speakValue\"" ws ":" ws symbol17-speakValue-value "}" ws
+symbol-12-oneof-2 ::= "{" ws "\"name\"" ws ":" ws symbol13-name-value "," ws "\"arguments\"" ws ":" ws symbol14-arguments-value "}" ws
+symbol19-name-value ::= "\"skill_check\""
+symbol21-relevantAttribute-value ::= "\"Strength\"" | "\"Agility\"" | "\"Intelligence\"" | "\"Perception\"" | "\"Charisma\""
+symbol22-relevantSkill-value ::= "\"Small Guns\"" | "\"Rifles\"" | "\"Explosives\"" | "\"Melee Weapons\"" | "\"Unarmed Combat\"" | "\"Negotiation\"" | "\"Impersonation\"" | "\"Intimidation\"" | "\"Etiquette\"" | "\"Convincing\"" | "\"Computer Hardware\"" | "\"Computer Software\"" | "\"Computer Hacking\"" | "\"Cybersecurity\"" | "\"Reaction\"" | "\"Medicine\"" | "\"Repair\""
+symbol23-skillRollThreshold-value ::= integer ws
+symbol24-assistantSkillRelevance-value ::= boolean ws
+symbol20-arguments-value ::= "{" ws "\"relevantAttribute\"" ws ":" ws symbol21-relevantAttribute-value "," ws "\"relevantSkill\"" ws ":" ws symbol22-relevantSkill-value "," ws "\"skillRollThreshold\"" ws ":" ws symbol23-skillRollThreshold-value "," ws "\"assistantSkillRelevance\"" ws ":" ws symbol24-assistantSkillRelevance-value "}" ws
+symbol-18-oneof-3 ::= "{" ws "\"name\"" ws ":" ws symbol19-name-value "," ws "\"arguments\"" ws ":" ws symbol20-arguments-value "}" ws
+
+###############################
+# Primitive value type symbols
+###############################
+tool_json ::= symbol-1-oneof-0 | symbol-5-oneof-1 | symbol-12-oneof-2 | symbol-18-oneof-3
+toolcall ::= "<tool_call>" ws tool_json ws "</tool_call>" ws
+
+llama_grammar_init_impl: failed to parse grammar
+ERROR: 2025-11-11T20:34:43.452148Z ERROR nobodywho::chat: Worker crashed: Error reading string: Error creating response: Error during inference step: Error while generating response: Invalid sampler configuration
+   at: <nobodywho_godot::GodotWriter as std::io::Write>::write (godot/src/lib.rs:1010)

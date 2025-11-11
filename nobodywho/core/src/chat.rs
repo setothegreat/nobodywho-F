@@ -1032,13 +1032,14 @@ impl<'a> Worker<'_, ChatWorker> {
                     recurring_items: Default::default(),
                 };
 
-                // First, add all the existing grammar items EXCEPT root, toolcall, and superroot
+                // First, add all the existing grammar items EXCEPT root, toolcall, tool_json, and superroot
                 for item in &tool_grammar.items {
                     match item {
                         gbnf::GrammarItem::Rule(rule) => {
                             // Skip rules that we'll be redefining
                             if rule.lhs.name != "root"
                                 && rule.lhs.name != "toolcall"
+                                && rule.lhs.name != "tool_json"
                                 && rule.lhs.name != "superroot"
                             {
                                 forced_grammar.items.push(item.clone());

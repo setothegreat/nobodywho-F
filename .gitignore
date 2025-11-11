@@ -3,3 +3,6 @@
 .cursor*
 .envrc
 .direnv/
+.claude/
+.CLAUDE.md
+CLAUDE.md
