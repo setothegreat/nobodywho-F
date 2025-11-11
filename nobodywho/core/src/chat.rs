@@ -1032,16 +1032,21 @@ impl<'a> Worker<'_, ChatWorker> {
                     recurring_items: Default::default(),
                 };
 
-                // First, add all the existing grammar items EXCEPT root
+                // First, add all the existing grammar items EXCEPT root, toolcall, and superroot
                 for item in &tool_grammar.items {
                     match item {
-                        gbnf::GrammarItem::Rule(rule) if rule.lhs.name != "root" => {
-                            forced_grammar.items.push(item.clone());
+                        gbnf::GrammarItem::Rule(rule) => {
+                            // Skip rules that we'll be redefining
+                            if rule.lhs.name != "root"
+                                && rule.lhs.name != "toolcall"
+                                && rule.lhs.name != "superroot"
+                            {
+                                forced_grammar.items.push(item.clone());
+                            }
                         }
                         gbnf::GrammarItem::Comment(_) | gbnf::GrammarItem::LineBreak => {
                             forced_grammar.items.push(item.clone());
                         }
-                        _ => {} // Skip root rule
                     }
                 }
 
@@ -1069,7 +1074,7 @@ impl<'a> Worker<'_, ChatWorker> {
                             rhs: root_rhs,
                         }));
 
-                    // Create toolcall rule
+                    // Create our custom toolcall rule
                     forced_grammar
                         .items
                         .push(gbnf::GrammarItem::Rule(gbnf::Rule {
@@ -1154,7 +1159,7 @@ impl<'a> Worker<'_, ChatWorker> {
                             gbnf::RepetitionType::OneOrMore,
                         ));
                     } else {
-                        // Multiple required
+                        // Multiple required - add them individually then allow more
                         for _ in 0..total_min.min(3) {
                             // Cap at 3 to avoid huge grammars
                             root_items.push(gbnf::ProductionItem::NonTerminal(
@@ -1164,16 +1169,22 @@ impl<'a> Worker<'_, ChatWorker> {
                                 gbnf::RepetitionType::One,
                             ));
                         }
-                        // Allow more if needed
-                        root_items.push(gbnf::ProductionItem::NonTerminal(
-                            gbnf::NonTerminalSymbol {
-                                name: "toolcall".into(),
-                            },
-                            gbnf::RepetitionType::ZeroOrMore,
-                        ));
+                        // Allow additional calls if max_calls permits
+                        if pass_1_sampler
+                            .manual_tool_sequence
+                            .iter()
+                            .any(|tc| tc.max_calls == -1 || tc.max_calls > total_min)
+                        {
+                            root_items.push(gbnf::ProductionItem::NonTerminal(
+                                gbnf::NonTerminalSymbol {
+                                    name: "toolcall".into(),
+                                },
+                                gbnf::RepetitionType::ZeroOrMore,
+                            ));
+                        }
                     }
 
-                    // Add the new root rule
+                    // Add the new root rule at the beginning
                     forced_grammar.items.insert(
                         0,
                         gbnf::GrammarItem::Rule(gbnf::Rule {
@@ -1191,16 +1202,33 @@ impl<'a> Worker<'_, ChatWorker> {
                         final_grammar.len()
                     );
                     debug!(
-                        "First 500 chars:\n{}",
-                        &final_grammar[..final_grammar.len().min(500)]
+                        "First 800 chars:\n{}",
+                        &final_grammar[..final_grammar.len().min(800)]
                     );
+                    trace!("Complete forced tool grammar:\n{}", final_grammar);
 
                     // Set the grammar
                     pass_1_sampler.use_grammar = true;
                     pass_1_sampler.gbnf_grammar = final_grammar;
                     pass_1_sampler.grammar_root = "root".to_string();
                     pass_1_sampler.lazy_grammar_trigger = String::new();
+                } else {
+                    error!("Could not find root rule in tool grammar!");
+                    return Err(SayError::WrappedResponseError(
+                        WrappedResponseError::InferenceError(
+                            InferenceError::GenerateResponseError(
+                                GenerateResponseError::InvalidSamplerConfig,
+                            ),
+                        ),
+                    ));
                 }
+            } else {
+                error!("Tool grammar was not generated!");
+                return Err(SayError::WrappedResponseError(
+                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
+                        GenerateResponseError::InvalidSamplerConfig,
+                    )),
+                ));
             }
 
             debug!("Manual tool calling configuration complete");
