@@ -1026,22 +1026,33 @@ impl<'a> Worker<'_, ChatWorker> {
 
             // Now create a forcing grammar based on the tool grammar
             if let Some(ref tool_grammar) = self.extra.tool_grammar {
-                // Build a custom grammar that forces tool calls
+                // Build a custom grammar that preserves all original rules
+                // We'll start with a copy of the original grammar and only modify what's necessary
                 let mut forced_grammar = gbnf::Grammar {
                     items: vec![],
-                    recurring_items: Default::default(),
+                    recurring_items: tool_grammar.recurring_items.clone(),
                 };
 
-                // First, add all the existing grammar items EXCEPT root, toolcall, tool_json, and superroot
+                // Copy all grammar items, but rename certain rules to avoid conflicts
+                // The original "root" rule becomes "_tool_json_schema" so we can reference it
                 for item in &tool_grammar.items {
                     match item {
                         gbnf::GrammarItem::Rule(rule) => {
-                            // Skip rules that we'll be redefining
-                            if rule.lhs.name != "root"
-                                && rule.lhs.name != "toolcall"
-                                && rule.lhs.name != "tool_json"
-                                && rule.lhs.name != "superroot"
-                            {
+                            // Rename the original root to _tool_json_schema
+                            if rule.lhs.name == "root" {
+                                forced_grammar
+                                    .items
+                                    .push(gbnf::GrammarItem::Rule(gbnf::Rule {
+                                        lhs: gbnf::NonTerminalSymbol {
+                                            name: "_tool_json_schema".into(),
+                                        },
+                                        rhs: rule.rhs.clone(),
+                                    }));
+                            } else if rule.lhs.name == "toolcall" || rule.lhs.name == "superroot" {
+                                // Skip the original toolcall and superroot rules as we'll create our own
+                                continue;
+                            } else {
+                                // Keep all other rules as-is
                                 forced_grammar.items.push(item.clone());
                             }
                         }
@@ -1051,28 +1062,31 @@ impl<'a> Worker<'_, ChatWorker> {
                     }
                 }
 
-                // Find the original root rule's RHS to reuse as tool_json
-                let original_root_rhs = tool_grammar.items.iter().find_map(|item| {
+                // Check if we successfully renamed the root rule
+                let has_tool_json_schema = forced_grammar.items.iter().any(|item| {
                     if let gbnf::GrammarItem::Rule(rule) = item {
-                        if rule.lhs.name == "root" {
-                            Some(rule.rhs.clone())
-                        } else {
-                            None
-                        }
+                        rule.lhs.name == "_tool_json_schema"
                     } else {
-                        None
+                        false
                     }
                 });
 
-                if let Some(root_rhs) = original_root_rhs {
-                    // Add a tool_json rule that uses the original root
+                if has_tool_json_schema {
+                    // Create a tool_json rule that references the renamed schema
                     forced_grammar
                         .items
                         .push(gbnf::GrammarItem::Rule(gbnf::Rule {
                             lhs: gbnf::NonTerminalSymbol {
                                 name: "tool_json".into(),
                             },
-                            rhs: root_rhs,
+                            rhs: gbnf::Production {
+                                items: vec![gbnf::ProductionItem::NonTerminal(
+                                    gbnf::NonTerminalSymbol {
+                                        name: "_tool_json_schema".into(),
+                                    },
+                                    gbnf::RepetitionType::One,
+                                )],
+                            },
                         }));
 
                     // Create our custom toolcall rule
