@@ -30,15 +30,68 @@ use crate::errors::{
 use crate::llm::{self};
 use crate::llm::{GlobalInferenceLockToken, GLOBAL_INFERENCE_LOCK};
 use crate::llm::{Worker, WriteOutput};
+use crate::sampler_config::ManualToolCall;
 use crate::sampler_config::{make_sampler, SamplerConfig};
 use llama_cpp_2::model::{AddBos, Special};
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
 use llama_cpp_2::{context::params::LlamaPoolingType, model::LlamaModel};
 use std::cmp::min;
+use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, MutexGuard};
 use tracing::{debug, error, info, trace, trace_span, warn};
+
+// FORCED TOOL CALLING
+
+/// Default maximum number of calls when max_calls is -1 (unlimited)
+const DEFAULT_UNLIMITED_CAP: i32 = 10;
+
+/// Tracks tool call counts for forced tool calling mode
+struct ToolCallTracker {
+    /// Maps tool name to (current_count, min_calls, max_calls)
+    counts: HashMap<String, (i32, i32, i32)>,
+}
+
+impl ToolCallTracker {
+    /// Create a new tracker from a sequence of manual tool calls
+    fn new(manual_sequence: &[ManualToolCall]) -> Self {
+        let mut counts = HashMap::new();
+        for manual_call in manual_sequence {
+            let max_calls = if manual_call.max_calls == -1 {
+                DEFAULT_UNLIMITED_CAP
+            } else {
+                manual_call.max_calls
+            };
+            counts.insert(
+                manual_call.tool_name.clone(),
+                (0, manual_call.min_calls, max_calls),
+            );
+        }
+        Self { counts }
+    }
+
+    /// Increment the call count for a tool
+    fn increment(&mut self, tool_name: &str) {
+        if let Some((count, _, _)) = self.counts.get_mut(tool_name) {
+            *count += 1;
+        }
+    }
+
+    /// Check if all minimum call requirements are met
+    fn all_mins_met(&self) -> bool {
+        self.counts.values().all(|(count, min, _)| count >= min)
+    }
+
+    /// Get list of tools that can still be called
+    fn get_available_tools(&self) -> Vec<String> {
+        self.counts
+            .iter()
+            .filter(|(_, (count, _, max))| count < max)
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+}
 
 // PARALLELISM
 
@@ -642,6 +695,114 @@ fn grammar_from_tools(tools: &[Tool]) -> Result<gbnf::Grammar, gbnf::json::JsonS
     Ok(json_grammar)
 }
 
+/// Generate GBNF grammar for forced tool calling with filtered tool list
+fn grammar_from_forced_tool_sequence(
+    all_tools: &[Tool],
+    available_tool_names: &[String],
+) -> Result<gbnf::Grammar, gbnf::json::JsonSchemaParseError> {
+    // Filter tools to only those that are available (haven't hit max_calls)
+    let available_tools: Vec<&Tool> = all_tools
+        .iter()
+        .filter(|tool| available_tool_names.contains(&tool.name))
+        .collect();
+
+    // Get a json schema that describes the tool call for each available tool
+    let tool_call_schemas: serde_json::Value = available_tools
+        .iter()
+        .map(|tool| {
+            serde_json::json!(
+                {
+                    "type": "object",
+                    "properties": {
+                        "name": { "const": tool.name, },
+                        "arguments": tool.json_schema
+                    },
+                    "required": ["name", "arguments"]
+                }
+            )
+        })
+        .collect();
+
+    // A json schema that describes any of the tool calls
+    let tool_call_schema = serde_json::json!(
+        { "oneOf": tool_call_schemas }
+    );
+
+    // A GBNF grammar for the above
+    let mut json_grammar = match gbnf::Grammar::from_json_schema(&tool_call_schema.to_string()) {
+        Ok(jg) => jg,
+        Err(e) => {
+            warn!("Failed generating forced tool grammar. Probably because of a bad json schema: {e:?}.");
+            return Err(e);
+        }
+    };
+
+    // Optional whitespace
+    let ws = gbnf::ProductionItem::NonTerminal(
+        gbnf::NonTerminalSymbol { name: "ws".into() },
+        gbnf::RepetitionType::One,
+    );
+
+    // Wrap the newly generated grammar's root in tool calling tokens
+    // e.g. <tool_call> json_grammar </tool_call>
+    let tool_call_rule = gbnf::GrammarItem::Rule(gbnf::Rule {
+        lhs: gbnf::NonTerminalSymbol {
+            name: "forced_toolcall".into(),
+        },
+        rhs: gbnf::Production {
+            items: vec![
+                // tool call begin
+                gbnf::ProductionItem::Terminal(
+                    gbnf::TerminalSymbol {
+                        value: "<tool_call>".into(),
+                    },
+                    gbnf::RepetitionType::One,
+                ),
+                // optional whitespace
+                ws.clone(),
+                // tool call json, just refer to the grammar we made from json schema
+                gbnf::ProductionItem::NonTerminal(
+                    gbnf::NonTerminalSymbol {
+                        name: "root".into(),
+                    },
+                    gbnf::RepetitionType::One,
+                ),
+                // optional whitespace
+                ws.clone(),
+                // </tool_call>
+                gbnf::ProductionItem::Terminal(
+                    gbnf::TerminalSymbol {
+                        value: "</tool_call>".into(),
+                    },
+                    gbnf::RepetitionType::One,
+                ),
+                // optional whitespace
+                ws.clone(),
+            ],
+        },
+    });
+
+    // One or more forced tool calls
+    let forced_root_rule = gbnf::GrammarItem::Rule(gbnf::Rule {
+        lhs: gbnf::NonTerminalSymbol {
+            name: "forced_root".into(),
+        },
+        rhs: gbnf::Production {
+            items: vec![gbnf::ProductionItem::NonTerminal(
+                gbnf::NonTerminalSymbol {
+                    name: "forced_toolcall".into(),
+                },
+                gbnf::RepetitionType::OneOrMore,
+            )],
+        },
+    });
+
+    json_grammar.items.push(tool_call_rule);
+    json_grammar.items.push(forced_root_rule);
+
+    Ok(json_grammar)
+}
+
 // TOOL CHAT WORKER
 
 struct ChatWorker {
@@ -941,309 +1102,216 @@ impl<'a> Worker<'_, ChatWorker> {
             .should_stop
             .store(false, std::sync::atomic::Ordering::Relaxed);
 
+        // TODO: this is the token used by qwen3
+        //       but e.g. deepseek uses "<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>" instead.
+        //       we need to support multiple different tool call begin tokens
         let tool_call_begin = "<tool_call>";
 
         self.extra.chat_state.add_user_message(text);
 
-        // This is the sampler for the FIRST generation pass
-        let mut pass_1_sampler = sampler.clone();
+        // Check if forced tool calling mode is enabled
+        if sampler.use_manual_tool_calling && !sampler.manual_tool_sequence.is_empty() {
+            info!("Using forced tool calling mode");
 
-        // DEBUG: Log sampler configuration
-        debug!(
-            "say() called with use_manual_tool_calling: {}",
-            pass_1_sampler.use_manual_tool_calling
-        );
-        debug!(
-            "say() manual_tool_sequence length: {}",
-            pass_1_sampler.manual_tool_sequence.len()
-        );
+            // Initialize tracker
+            let mut tracker = ToolCallTracker::new(&sampler.manual_tool_sequence);
 
-        if pass_1_sampler.use_manual_tool_calling {
-            debug!("Using manual tool calling configuration.");
-            debug!(
-                "Manual tool sequence: {:?}",
-                pass_1_sampler.manual_tool_sequence
-            );
+            // Auto-prepend manual_tool_prefix (hidden from user but in context)
+            let mut accumulated_response = sampler.manual_tool_prefix.clone();
 
-            // Validate that we have tools configured
-            if pass_1_sampler.manual_tool_sequence.is_empty() {
-                error!("use_manual_tool_calling is true but manual_tool_sequence is empty!");
-                return Err(SayError::WrappedResponseError(
-                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
-                        GenerateResponseError::InvalidSamplerConfig,
-                    )),
-                ));
-            }
+            // Loop until all min_calls constraints are met
+            while !tracker.all_mins_met() {
+                // Get available tools (those that haven't hit max_calls)
+                let available_tool_names = tracker.get_available_tools();
 
-            // Validate that we have tools registered
-            if self.extra.tools.is_empty() {
-                error!("Manual tool calling enabled but no tools are registered!");
-                return Err(SayError::WrappedResponseError(
-                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
-                        GenerateResponseError::InvalidSamplerConfig,
-                    )),
-                ));
-            }
-
-            // Use the existing tool grammar generation but modify it for forced calling
-            // First, ensure we have a tool grammar
-            if self.extra.tool_grammar.is_none() {
-                // Generate the tool grammar using existing method
-                let tool_call_schema = serde_json::json!({
-                    "oneOf": self.extra.tools.iter().map(|tool| {
-                        serde_json::json!({
-                            "type": "object",
-                            "properties": {
-                                "name": {
-                                    "type": "string",
-                                    "enum": [tool.name.clone()]
-                                },
-                                "arguments": tool.json_schema.clone()
-                            },
-                            "required": ["name", "arguments"]
-                        })
-                    }).collect::<Vec<_>>()
-                });
-
-                let json_grammar =
-                    match gbnf::Grammar::from_json_schema(&tool_call_schema.to_string()) {
-                        Ok(grammar) => grammar,
-                        Err(e) => {
-                            error!("Failed to create GBNF grammar from JSON schema: {}", e);
-                            return Err(SayError::WrappedResponseError(
-                                WrappedResponseError::InferenceError(
-                                    InferenceError::GenerateResponseError(
-                                        GenerateResponseError::InvalidSamplerConfig,
-                                    ),
-                                ),
-                            ));
-                        }
-                    };
-
-                // Store it temporarily
-                self.extra.tool_grammar = Some(json_grammar);
-            }
-
-            // Now create a forcing grammar based on the tool grammar
-            if let Some(ref tool_grammar) = self.extra.tool_grammar {
-                // Clone the base grammar to preserve all original rules
-                // This is the same approach as the normal grammar_from_tools function
-                let mut forced_grammar = tool_grammar.clone();
-
-                // Helper for creating whitespace references
-                let ws = gbnf::ProductionItem::NonTerminal(
-                    gbnf::NonTerminalSymbol { name: "ws".into() },
-                    gbnf::RepetitionType::One,
-                );
-
-                // Create toolcall rule that wraps the original "root" rule
-                // This is identical to the normal grammar_from_tools approach (lines 587-622)
-                let tool_call_rule = gbnf::GrammarItem::Rule(gbnf::Rule {
-                    lhs: gbnf::NonTerminalSymbol {
-                        name: "toolcall".into(),
-                    },
-                    rhs: gbnf::Production {
-                        items: vec![
-                            gbnf::ProductionItem::Terminal(
-                                gbnf::TerminalSymbol {
-                                    value: "<tool_call>".into(),
-                                },
-                                gbnf::RepetitionType::One,
-                            ),
-                            ws.clone(),
-                            // Reference the original "root" rule from from_json_schema
-                            gbnf::ProductionItem::NonTerminal(
-                                gbnf::NonTerminalSymbol {
-                                    name: "root".into(),
-                                },
-                                gbnf::RepetitionType::One,
-                            ),
-                            ws.clone(),
-                            gbnf::ProductionItem::Terminal(
-                                gbnf::TerminalSymbol {
-                                    value: "</tool_call>".into(),
-                                },
-                                gbnf::RepetitionType::One,
-                            ),
-                            ws.clone(),
-                        ],
-                    },
-                });
-
-                // Create custom root rule with prefix support
-                let mut root_items = Vec::new();
-
-                // Add prefix if specified
-                if !pass_1_sampler.manual_tool_prefix.is_empty() {
-                    root_items.push(gbnf::ProductionItem::Terminal(
-                        gbnf::TerminalSymbol {
-                            value: pass_1_sampler.manual_tool_prefix.clone(),
-                        },
-                        gbnf::RepetitionType::One,
-                    ));
-                    root_items.push(ws.clone());
+                if available_tool_names.is_empty() {
+                    warn!("No available tools but mins not met - this shouldn't happen");
+                    break;
                 }
 
-                // Calculate total minimum calls
-                let total_min: i32 = pass_1_sampler
-                    .manual_tool_sequence
-                    .iter()
-                    .map(|tc| tc.min_calls)
-                    .sum();
+                // Generate grammar for available tools
+                let forced_grammar = match grammar_from_forced_tool_sequence(
+                    &self.extra.tools,
+                    &available_tool_names,
+                ) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        error!("Failed generating forced tool grammar: {e:?}. Falling back to normal generation.");
+                        break;
+                    }
+                };
 
-                // Add tool calls based on requirements
-                if total_min == 0 {
-                    // Optional tool calls
-                    root_items.push(gbnf::ProductionItem::NonTerminal(
-                        gbnf::NonTerminalSymbol {
-                            name: "toolcall".into(),
-                        },
-                        gbnf::RepetitionType::ZeroOrMore,
-                    ));
-                } else if total_min == 1 {
-                    // One required, possibly more
-                    root_items.push(gbnf::ProductionItem::NonTerminal(
-                        gbnf::NonTerminalSymbol {
-                            name: "toolcall".into(),
-                        },
-                        gbnf::RepetitionType::OneOrMore,
-                    ));
+                // Set up sampler with forced grammar
+                let mut forced_sampler = sampler.clone();
+                forced_sampler.use_grammar = true;
+                forced_sampler.grammar_root = "forced_root".into();
+                forced_sampler.lazy_grammar_trigger = "<tool_call>".into();
+                forced_sampler.gbnf_grammar = forced_grammar.to_string();
+
+                // Generate response with forced tools
+                let response = self.wrapped_update_context_and_generate_response(
+                    forced_sampler,
+                    stop_words.clone(),
+                    respond.clone(),
+                    tool_call_begin.into(),
+                )?;
+
+                accumulated_response.push_str(&response);
+
+                // Extract and execute tool calls
+                if let Some(tool_calls) = extract_tool_calls(&response) {
+                    debug!("Forced tool calls: {tool_calls:?}");
+
+                    self.extra.chat_state.add_tool_calls(tool_calls.clone());
+
+                    for tool_call in &tool_calls {
+                        // Update tracker
+                        tracker.increment(&tool_call.name);
+
+                        // Find and execute the tool
+                        let Some(tool) = self.extra.tools.iter().find(|t| t.name == tool_call.name)
+                        else {
+                            error!(
+                                "Model triggered tool call for invalid tool name: {}",
+                                tool_call.name
+                            );
+                            let errmsg = format!("ERROR - Invalid tool name: {}", tool_call.name);
+                            self.extra
+                                .chat_state
+                                .add_tool_resp(tool_call.name.clone(), errmsg);
+                            continue;
+                        };
+
+                        // Call the tool
+                        let tool_response = (tool.function)(tool_call.arguments.clone());
+                        debug!(?tool_call.name, ?tool_response);
+
+                        // Add to chat history
+                        self.extra
+                            .chat_state
+                            .add_tool_resp(tool_call.name.clone(), tool_response);
+                    }
                 } else {
-                    // Multiple required - add them individually then allow more
-                    for _ in 0..total_min.min(3) {
-                        // Cap at 3 to avoid huge grammars
-                        root_items.push(gbnf::ProductionItem::NonTerminal(
-                            gbnf::NonTerminalSymbol {
-                                name: "toolcall".into(),
-                            },
-                            gbnf::RepetitionType::One,
-                        ));
-                    }
-                    // Allow additional calls if max_calls permits
-                    if pass_1_sampler
-                        .manual_tool_sequence
-                        .iter()
-                        .any(|tc| tc.max_calls == -1 || tc.max_calls > total_min)
-                    {
-                        root_items.push(gbnf::ProductionItem::NonTerminal(
-                            gbnf::NonTerminalSymbol {
-                                name: "toolcall".into(),
-                            },
-                            gbnf::RepetitionType::ZeroOrMore,
-                        ));
-                    }
+                    warn!("No tool calls extracted during forced tool calling - breaking loop");
+                    break;
                 }
+            }
 
-                let forced_root_rule = gbnf::GrammarItem::Rule(gbnf::Rule {
-                    lhs: gbnf::NonTerminalSymbol {
-                        name: "forced_root".into(),
-                    },
-                    rhs: gbnf::Production { items: root_items },
-                });
+            info!("All min_calls constraints met, transitioning to post-tool behavior");
 
-                // Add new rules to grammar (same approach as normal flow)
-                forced_grammar.items.push(tool_call_rule);
-                forced_grammar.items.push(forced_root_rule);
+            // After forced tools complete, check if we should continue with custom grammar or normal generation
+            if sampler.use_grammar
+                && !sampler.gbnf_grammar.is_empty()
+                && sampler.lazy_grammar_trigger.is_empty()
+            {
+                // User has specified a custom grammar (non-lazy), use it for continued generation
+                info!("Continuing with user-specified custom grammar");
 
-                let final_grammar = forced_grammar.to_string();
+                let continued_response = self.wrapped_update_context_and_generate_response(
+                    sampler.clone(),
+                    stop_words.clone(),
+                    respond.clone(),
+                    tool_call_begin.into(),
+                )?;
 
-                debug!(
-                    "Generated forced tool grammar length: {} chars",
-                    final_grammar.len()
-                );
-                debug!(
-                    "First 800 chars:\n{}",
-                    &final_grammar[..final_grammar.len().min(800)]
-                );
-                trace!("Complete forced tool grammar:\n{}", final_grammar);
-
-                // Set the grammar with custom entry point
-                pass_1_sampler.use_grammar = true;
-                pass_1_sampler.gbnf_grammar = final_grammar;
-                pass_1_sampler.grammar_root = "forced_root".to_string();
-                pass_1_sampler.lazy_grammar_trigger = String::new();
+                accumulated_response.push_str(&continued_response);
             } else {
-                error!("Tool grammar was not generated!");
-                return Err(SayError::WrappedResponseError(
-                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
-                        GenerateResponseError::InvalidSamplerConfig,
-                    )),
-                ));
+                // Continue with normal generation (no grammar constraints)
+                info!("Continuing with normal text generation");
+
+                let mut normal_sampler = sampler.clone();
+                normal_sampler.use_grammar = false;
+                normal_sampler.gbnf_grammar.clear();
+                normal_sampler.lazy_grammar_trigger.clear();
+
+                let continued_response = self.wrapped_update_context_and_generate_response(
+                    normal_sampler,
+                    stop_words.clone(),
+                    respond.clone(),
+                    tool_call_begin.into(),
+                )?;
+
+                accumulated_response.push_str(&continued_response);
             }
 
-            debug!("Manual tool calling configuration complete");
-        } else if !pass_1_sampler.use_grammar {
-            // Default tool grammar behavior (from original code)
-            debug!("Using default tool grammar.");
-            if let Some(ref tool_grammar) = self.extra.tool_grammar {
-                pass_1_sampler.use_grammar = true;
-                pass_1_sampler.grammar_root = "superroot".to_string();
-                pass_1_sampler.lazy_grammar_trigger = "<tool_call>".to_string();
-                pass_1_sampler.gbnf_grammar = tool_grammar.to_string();
-            }
-        } else {
-            debug!("Using custom user grammar");
+            // Add the complete response (including prefix + tool calls + continued generation) to chat
+            self.extra
+                .chat_state
+                .add_assistant_message(accumulated_response);
+
+            // Update tokens_in_context
+            let render_as_tokens = self.get_render_as_tokens()?;
+            self.extra
+                .chat_state
+                .set_tokens_in_context(render_as_tokens);
+
+            return Ok(self);
         }
 
-        // get the finished response (Pass 1)
+        // Normal tool calling flow (original code)
+        let mut sampler = sampler;
+        if let Some(ref tool_grammar) = self.extra.tool_grammar {
+            sampler.use_grammar = true;
+            sampler.grammar_root = "superroot".into();
+            sampler.lazy_grammar_trigger = "<tool_call>".into(); // TODO: multiple tool call tokens
+            sampler.gbnf_grammar = tool_grammar.to_string();
+        }
+
+        // get the finished response
         let mut response: String = self.wrapped_update_context_and_generate_response(
-            pass_1_sampler.clone(),
+            sampler.clone(),
             stop_words.clone(),
             respond.clone(),
             tool_call_begin.into(),
         )?;
 
-        // Tool calling loop (same as original)
         while let Some(tool_calls) = extract_tool_calls(&response) {
             debug!("Got tool calls! {tool_calls:?}");
 
             self.extra.chat_state.add_tool_calls(tool_calls.clone());
 
             for tool_call in tool_calls {
+                // find the tool
+                // this is just a stupid linear search
+                // but I think it's probably faster than something fancy as long as we have few tools
+                // /shrug I'm happy to be wrong
                 let Some(tool) = self.extra.tools.iter().find(|t| t.name == tool_call.name) else {
-                    error!("Tool call for invalid tool name: {}", tool_call.name);
+                    // in case the tool isn't found.
+                    // I *think* this should be impossible, as long as the tool calling grammar
+                    // works.
+                    error!(
+                        "Model triggered tool call for invalid tool name: {}",
+                        tool_call.name
+                    );
                     let errmsg = format!("ERROR - Invalid tool name: {}", tool_call.name);
                     self.extra.chat_state.add_tool_resp(tool_call.name, errmsg);
                     continue;
                 };
 
                 // call the tool
-                let tool_response = (tool.function)(tool_call.arguments);
-                debug!(?tool_call.name, ?tool_response);
+                let response = (tool.function)(tool_call.arguments);
+                debug!(?tool_call.name, ?response);
+
+                // add to chat history
                 self.extra
                     .chat_state
-                    .add_tool_resp(tool_call.name, tool_response);
+                    .add_tool_resp(tool_call.name, response);
             }
 
-            // Pass 2: Use original sampler config for follow-up
-            let mut pass_2_sampler = sampler.clone();
-
-            if sampler.use_grammar {
-                // User wants follow-up grammar
-                debug!("Using follow-up GBNF grammar.");
-                pass_2_sampler.use_grammar = true;
-                pass_2_sampler.gbnf_grammar = sampler.gbnf_grammar.clone();
-                pass_2_sampler.grammar_root = sampler.grammar_root.clone();
-            } else {
-                // No follow-up grammar - free generation
-                debug!("No follow-up GBNF. Disabling grammar for follow-up.");
-                pass_2_sampler.use_grammar = false;
-            }
-
-            // get the finished response (Pass 2)
+            // get the finished response
             response = self.wrapped_update_context_and_generate_response(
-                pass_2_sampler,
+                sampler.clone(),
                 stop_words.clone(),
                 respond.clone(),
                 tool_call_begin.into(),
             )?;
         }
-
         debug_assert!(!response.contains(tool_call_begin));
         self.extra.chat_state.add_assistant_message(response);
 
-        // Update tokens_in_context
+        // Update tokens_in_context as the model already has seen this respone
         let render_as_tokens = self.get_render_as_tokens()?;
+
         self.extra
             .chat_state
             .set_tokens_in_context(render_as_tokens);
