@@ -1,11 +1,5 @@
-2025-11-11T22:08:41.863604Z  INFO nobodywho::chat: Worker writing until done
-parse: error parsing grammar: expecting name at _tool_json_schema ::= symbol-1-oneof-0 | symbol-5-oneof-1 | symbol-12-oneof-2 | symbol-18-oneof-3
-
-###############################
-# Primitive value type symbols
-###############################
-tool_json ::= _tool_json_schema
-toolcall ::= "<tool_call>" ws tool_json ws "</tool_call>" ws
+2025-11-11T22:59:53.776748Z  INFO nobodywho::chat: Worker writing until done
+parse: error parsing grammar: expecting ::= at _root ::= "<think>Okay, I need to use the remember tool to check my memory to before proceeding</think>" ws toolcall+
 boolean ::= "true" | "false" ws
 integer ::= ("-"? ([0-9] | [1-9] [0-9]*)) ws
 null ::= "null" ws
@@ -14,7 +8,6 @@ string ::= "\"" ([^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-
 ws ::= [ \t\n]*
 
 
-root ::= "<think>Okay, I need to use the remember tool to check my memory to before proceeding</think>" ws toolcall+
 ################################################
 # DYNAMICALLY GENERATED JSON-SCHEMA GRAMMAR
 ################################################
@@ -43,13 +36,15 @@ symbol23-skillRollThreshold-value ::= integer ws
 symbol24-assistantSkillRelevance-value ::= boolean ws
 symbol20-arguments-value ::= "{" ws "\"relevantAttribute\"" ws ":" ws symbol21-relevantAttribute-value "," ws "\"relevantSkill\"" ws ":" ws symbol22-relevantSkill-value "," ws "\"skillRollThreshold\"" ws ":" ws symbol23-skillRollThreshold-value "," ws "\"assistantSkillRelevance\"" ws ":" ws symbol24-assistantSkillRelevance-value "}" ws
 symbol-18-oneof-3 ::= "{" ws "\"name\"" ws ":" ws symbol19-name-value "," ws "\"arguments\"" ws ":" ws symbol20-arguments-value "}" ws
-_tool_json_schema ::= symbol-1-oneof-0 | symbol-5-oneof-1 | symbol-12-oneof-2 | symbol-18-oneof-3
+root ::= symbol-1-oneof-0 | symbol-5-oneof-1 | symbol-12-oneof-2 | symbol-18-oneof-3
 
 ###############################
 # Primitive value type symbols
 ###############################
-tool_json ::= _tool_json_schema
-toolcall ::= "<tool_call>" ws tool_json ws "</tool_call>" ws
+toolcall ::= "<tool_call>" ws root ws "</tool_call>" ws
+superroot ::= toolcall+
+toolcall ::= "<tool_call>" ws root ws "</tool_call>" ws
+forced_root ::= "<think>Okay, I need to use the remember tool to check my memory to before proceeding</think>" ws toolcall+
 boolean ::= "true" | "false" ws
 integer ::= ("-"? ([0-9] | [1-9] [0-9]*)) ws
 null ::= "null" ws
@@ -58,5 +53,5 @@ string ::= "\"" ([^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-
 ws ::= [ \t\n]*
 
 llama_grammar_init_impl: failed to parse grammar
-ERROR: 2025-11-11T22:08:41.880994Z ERROR nobodywho::chat: Worker crashed: Error reading string: Error creating response: Error during inference step: Error while generating response: Invalid sampler configuration
+ERROR: 2025-11-11T22:59:53.794331Z ERROR nobodywho::chat: Worker crashed: Error reading string: Error creating response: Error during inference step: Error while generating response: Invalid sampler configuration
    at: <nobodywho_godot::GodotWriter as std::io::Write>::write (godot/src/lib.rs:1010)
