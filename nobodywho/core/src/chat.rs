@@ -1046,15 +1046,23 @@ impl<'a> Worker<'_, ChatWorker> {
                             let rule_name = rule.lhs.name.clone();
 
                             if rule_name == "toolcall" {
-                                // This is the main tool call rule - rename it
+                                // This is the main tool call rule - rename it to be tool-specific
                                 let rule_str = format!("{} ::= {}", tool_rule_name, rule.rhs);
                                 debug!(
                                     "  Adding renamed rule: {}",
                                     &rule_str[..rule_str.len().min(100)]
                                 );
                                 forced_tool_rules.push(rule_str);
+                            } else if rule_name == "root" {
+                                // CRITICAL FIX: Rename the 'root' rule from the generated grammar
+                                // to avoid conflicts with our custom root rule
+                                let renamed_rule =
+                                    format!("{}_json ::= {}", tool_rule_name, rule.rhs);
+                                debug!("  Renaming root to: {}_json", tool_rule_name);
+                                all_tool_gbnf_parts.push(renamed_rule);
+                                seen_rules.insert(format!("{}_json", tool_rule_name));
                             } else if rule_name != "superroot" {
-                                // Dependent rules (json, ws, root, value, etc.)
+                                // Dependent rules (ws, string, value, etc.)
                                 // Only add if we haven't seen this rule before
                                 if seen_rules.insert(rule_name.clone()) {
                                     let rule_str = format!("{} ::= {}", rule_name, rule.rhs);
@@ -1080,7 +1088,23 @@ impl<'a> Worker<'_, ChatWorker> {
             debug!("Generated {} forced tool rules", forced_tool_rules.len());
             debug!("Generated {} dependent rules", all_tool_gbnf_parts.len());
 
-            // 2. Build the root rule from the sequence
+            // 2. Build the tool call wrappers that reference the renamed JSON rules
+            // Each tool_call_X should wrap the JSON in <tool_call> tags
+            let mut tool_wrappers = Vec::new();
+            for tool_call_config in &pass_1_sampler.manual_tool_sequence {
+                let tool_rule_name = format!("tool_call_{}", tool_call_config.tool_name);
+                let tool_json_rule = format!("{}_json", tool_rule_name);
+
+                // Create wrapper: tool_call_X ::= "<tool_call>" ws X_json ws "</tool_call>" ws
+                let wrapper = format!(
+                    "{} ::= \"<tool_call>\" ws {} ws \"</tool_call>\" ws",
+                    tool_rule_name, tool_json_rule
+                );
+                debug!("  Creating wrapper: {}", wrapper);
+                tool_wrappers.push(wrapper);
+            }
+
+            // 3. Build the root rule from the sequence
             let mut root_rule = "root ::= ".to_string();
 
             // Add prefix if specified
@@ -1165,19 +1189,31 @@ impl<'a> Worker<'_, ChatWorker> {
 
             root_rule.push_str(&tool_sequence_rules.join(" "));
 
-            // 3. Assemble the final GBNF
+            // 3. Assemble the final GBNF in the correct order
+            // Order matters: root rule first, then wrappers, then JSON rules, then primitives
             let final_gbnf = format!(
-                "{}\n{}\n{}",
+                "{}\n{}\n{}\n{}",
                 root_rule,
-                forced_tool_rules.join("\n"),
-                all_tool_gbnf_parts.join("\n")
+                tool_wrappers.join("\n"),       // The <tool_call> wrappers
+                forced_tool_rules.join("\n"),   // The renamed JSON structure rules
+                all_tool_gbnf_parts.join("\n")  // Primitive rules (string, ws, etc.)
             );
 
             // Log the complete grammar (with length limits for console)
             debug!("=== Generated Manual Tool GBNF ===");
             debug!("Root rule: {}", root_rule);
             debug!(
-                "Forced tool rules ({}): {}",
+                "Tool wrappers ({}): {}",
+                tool_wrappers.len(),
+                tool_wrappers
+                    .iter()
+                    .take(2)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+            debug!(
+                "Tool JSON rules ({}): {}",
                 forced_tool_rules.len(),
                 forced_tool_rules
                     .iter()
@@ -1192,8 +1228,12 @@ impl<'a> Worker<'_, ChatWorker> {
             trace!("Complete GBNF:\n{}", final_gbnf);
 
             // 4. Validate the grammar before using it
-            if forced_tool_rules.is_empty() {
-                error!("Failed to generate any tool rules! Grammar generation failed silently.");
+            if tool_wrappers.is_empty() || forced_tool_rules.is_empty() {
+                error!(
+                    "Failed to generate tool rules! Wrappers: {}, JSON rules: {}",
+                    tool_wrappers.len(),
+                    forced_tool_rules.len()
+                );
                 return Err(SayError::WrappedResponseError(
                     WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
                         GenerateResponseError::InvalidSamplerConfig,
