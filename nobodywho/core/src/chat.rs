@@ -960,18 +960,22 @@ impl<'a> Worker<'_, ChatWorker> {
 
         if pass_1_sampler.use_manual_tool_calling {
             debug!("Using manual tool calling configuration.");
-            debug!("Manual tool sequence: {:?}", pass_1_sampler.manual_tool_sequence);
-            debug!("Available tools: {:?}", self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>());
+            debug!(
+                "Manual tool sequence: {:?}",
+                pass_1_sampler.manual_tool_sequence
+            );
+            debug!(
+                "Available tools: {:?}",
+                self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>()
+            );
 
             // VALIDATION: Check that we have tools configured
             if pass_1_sampler.manual_tool_sequence.is_empty() {
                 error!("use_manual_tool_calling is true but manual_tool_sequence is empty!");
                 return Err(SayError::WrappedResponseError(
-                    WrappedResponseError::InferenceError(
-                        InferenceError::GenerateResponseError(
-                            GenerateResponseError::InvalidSamplerConfig,
-                        ),
-                    ),
+                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
+                        GenerateResponseError::InvalidSamplerConfig,
+                    )),
                 ));
             }
 
@@ -979,11 +983,9 @@ impl<'a> Worker<'_, ChatWorker> {
             if self.extra.tools.is_empty() {
                 error!("Manual tool calling enabled but no tools are registered!");
                 return Err(SayError::WrappedResponseError(
-                    WrappedResponseError::InferenceError(
-                        InferenceError::GenerateResponseError(
-                            GenerateResponseError::InvalidSamplerConfig,
-                        ),
-                    ),
+                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
+                        GenerateResponseError::InvalidSamplerConfig,
+                    )),
                 ));
             }
 
@@ -999,8 +1001,10 @@ impl<'a> Worker<'_, ChatWorker> {
 
                 let Some(tool) = self.extra.tools.iter().find(|t| t.name == *tool_name) else {
                     error!("Manual Tool Call: Tool '{}' not found.", tool_name);
-                    error!("Available tools: {:?}", 
-                        self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>());
+                    error!(
+                        "Available tools: {:?}",
+                        self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>()
+                    );
                     return Err(SayError::WrappedResponseError(
                         WrappedResponseError::InferenceError(
                             InferenceError::GenerateResponseError(
@@ -1010,7 +1014,10 @@ impl<'a> Worker<'_, ChatWorker> {
                     ));
                 };
 
-                debug!("Found tool: {} with schema: {:?}", tool_name, tool.json_schema);
+                debug!(
+                    "Found tool: {} with schema: {:?}",
+                    tool_name, tool.json_schema
+                );
 
                 // Generate GBNF for this specific tool
                 let tool_grammar = grammar_from_tools(&[tool.clone()]).map_err(|e| {
@@ -1026,8 +1033,11 @@ impl<'a> Worker<'_, ChatWorker> {
                 })?;
 
                 let tool_rule_name = format!("tool_call_{}", tool_name);
-                debug!("Generated {} grammar rules for tool '{}'", 
-                    tool_grammar.items.len(), tool_name);
+                debug!(
+                    "Generated {} grammar rules for tool '{}'",
+                    tool_grammar.items.len(),
+                    tool_name
+                );
 
                 // Extract and rename rules
                 for grammar_item in tool_grammar.items {
@@ -1038,7 +1048,10 @@ impl<'a> Worker<'_, ChatWorker> {
                             if rule_name == "toolcall" {
                                 // This is the main tool call rule - rename it
                                 let rule_str = format!("{} ::= {}", tool_rule_name, rule.rhs);
-                                debug!("  Adding renamed rule: {}", &rule_str[..rule_str.len().min(100)]);
+                                debug!(
+                                    "  Adding renamed rule: {}",
+                                    &rule_str[..rule_str.len().min(100)]
+                                );
                                 forced_tool_rules.push(rule_str);
                             } else if rule_name != "superroot" {
                                 // Dependent rules (json, ws, root, value, etc.)
@@ -1072,9 +1085,13 @@ impl<'a> Worker<'_, ChatWorker> {
 
             // Add prefix if specified
             if !pass_1_sampler.manual_tool_prefix.is_empty() {
-                debug!("Adding manual tool prefix: '{}'", pass_1_sampler.manual_tool_prefix);
+                debug!(
+                    "Adding manual tool prefix: '{}'",
+                    pass_1_sampler.manual_tool_prefix
+                );
                 // Escape the prefix as a GBNF string literal
-                let escaped_prefix = pass_1_sampler.manual_tool_prefix
+                let escaped_prefix = pass_1_sampler
+                    .manual_tool_prefix
                     .replace("\\", "\\\\")
                     .replace("\"", "\\\"")
                     .replace("\n", "\\n")
@@ -1110,9 +1127,10 @@ impl<'a> Worker<'_, ChatWorker> {
                 } else if max > 0 && max >= min {
                     if min == max {
                         // Exactly N times: just repeat the rule
-                        tool_sequence_rules.push(
-                            format!("( {} )", format!("{} ", tool_rule_name).repeat(max as usize).trim())
-                        );
+                        tool_sequence_rules.push(format!(
+                            "( {} )",
+                            format!("{} ", tool_rule_name).repeat(max as usize).trim()
+                        ));
                         continue;
                     } else {
                         // Between N and M: expand to required + optional
@@ -1132,9 +1150,15 @@ impl<'a> Worker<'_, ChatWorker> {
                     String::new() // Default to exactly 1
                 };
 
-                debug!("Tool '{}' repetition: {}", 
-                    tool_call_config.tool_name, 
-                    if repetition_str.is_empty() { "exactly 1" } else { &repetition_str });
+                debug!(
+                    "Tool '{}' repetition: {}",
+                    tool_call_config.tool_name,
+                    if repetition_str.is_empty() {
+                        "exactly 1"
+                    } else {
+                        &repetition_str
+                    }
+                );
 
                 tool_sequence_rules.push(format!("{}{}", tool_rule_name, repetition_str));
             }
@@ -1152,9 +1176,16 @@ impl<'a> Worker<'_, ChatWorker> {
             // Log the complete grammar (with length limits for console)
             debug!("=== Generated Manual Tool GBNF ===");
             debug!("Root rule: {}", root_rule);
-            debug!("Forced tool rules ({}): {}", 
+            debug!(
+                "Forced tool rules ({}): {}",
                 forced_tool_rules.len(),
-                forced_tool_rules.iter().take(3).map(|r| &r[..r.len().min(80)]).collect::<Vec<_>>().join("; "));
+                forced_tool_rules
+                    .iter()
+                    .take(3)
+                    .map(|r| &r[..r.len().min(80)])
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
             debug!("Total GBNF length: {} characters", final_gbnf.len());
 
             // Write full grammar to trace log
@@ -1164,11 +1195,9 @@ impl<'a> Worker<'_, ChatWorker> {
             if forced_tool_rules.is_empty() {
                 error!("Failed to generate any tool rules! Grammar generation failed silently.");
                 return Err(SayError::WrappedResponseError(
-                    WrappedResponseError::InferenceError(
-                        InferenceError::GenerateResponseError(
-                            GenerateResponseError::InvalidSamplerConfig,
-                        ),
-                    ),
+                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
+                        GenerateResponseError::InvalidSamplerConfig,
+                    )),
                 ));
             }
 
@@ -1179,7 +1208,6 @@ impl<'a> Worker<'_, ChatWorker> {
             pass_1_sampler.lazy_grammar_trigger = String::new(); // Disable lazy trigger for manual mode
 
             debug!("Manual tool calling configuration complete");
-
         } else if !pass_1_sampler.use_grammar {
             // Default tool grammar behavior (original code)
             debug!("Using default tool grammar.");
