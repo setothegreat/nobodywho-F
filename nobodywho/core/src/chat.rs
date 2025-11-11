@@ -1035,6 +1035,9 @@ impl<'a> Worker<'_, ChatWorker> {
 
                 // Copy all grammar items, but rename certain rules to avoid conflicts
                 // The original "root" rule becomes "_tool_json_schema" so we can reference it
+                // Define primitive rules that are already in recurring_items to avoid duplication
+                let primitive_rules = ["boolean", "integer", "null", "number", "string", "ws"];
+
                 for item in &tool_grammar.items {
                     match item {
                         gbnf::GrammarItem::Rule(rule) => {
@@ -1050,6 +1053,9 @@ impl<'a> Worker<'_, ChatWorker> {
                                     }));
                             } else if rule.lhs.name == "toolcall" || rule.lhs.name == "superroot" {
                                 // Skip the original toolcall and superroot rules as we'll create our own
+                                continue;
+                            } else if primitive_rules.contains(&rule.lhs.name.as_str()) {
+                                // Skip primitive rules - they're already in recurring_items
                                 continue;
                             } else {
                                 // Keep all other rules as-is
