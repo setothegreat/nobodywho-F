@@ -960,35 +960,47 @@ impl<'a> Worker<'_, ChatWorker> {
 
         if pass_1_sampler.use_manual_tool_calling {
             debug!("Using manual tool calling configuration.");
-            debug!(
-                "Manual tool sequence: {:?}",
-                pass_1_sampler.manual_tool_sequence
-            );
+            debug!("Manual tool sequence: {:?}", pass_1_sampler.manual_tool_sequence);
+            debug!("Available tools: {:?}", self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>());
 
-            // Validate that we have tools configured
+            // VALIDATION: Check that we have tools configured
             if pass_1_sampler.manual_tool_sequence.is_empty() {
                 error!("use_manual_tool_calling is true but manual_tool_sequence is empty!");
                 return Err(SayError::WrappedResponseError(
-                    WrappedResponseError::InferenceError(InferenceError::GenerateResponseError(
-                        GenerateResponseError::InvalidSamplerConfig,
-                    )),
+                    WrappedResponseError::InferenceError(
+                        InferenceError::GenerateResponseError(
+                            GenerateResponseError::InvalidSamplerConfig,
+                        ),
+                    ),
+                ));
+            }
+
+            // VALIDATION: Check that we have tools registered
+            if self.extra.tools.is_empty() {
+                error!("Manual tool calling enabled but no tools are registered!");
+                return Err(SayError::WrappedResponseError(
+                    WrappedResponseError::InferenceError(
+                        InferenceError::GenerateResponseError(
+                            GenerateResponseError::InvalidSamplerConfig,
+                        ),
+                    ),
                 ));
             }
 
             let mut forced_tool_rules = Vec::new();
             let mut all_tool_gbnf_parts = Vec::new();
+            // Track which dependent rules we've seen to avoid duplicates
+            let mut seen_rules = std::collections::HashSet::new();
 
-            // 1. Find all tools and generate their individual GBNF
+            // 1. Generate GBNF for each tool in the sequence
             for tool_call_config in &pass_1_sampler.manual_tool_sequence {
                 let tool_name = &tool_call_config.tool_name;
                 debug!("Processing manual tool call for: {}", tool_name);
 
                 let Some(tool) = self.extra.tools.iter().find(|t| t.name == *tool_name) else {
                     error!("Manual Tool Call: Tool '{}' not found.", tool_name);
-                    error!(
-                        "Available tools: {:?}",
-                        self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>()
-                    );
+                    error!("Available tools: {:?}", 
+                        self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>());
                     return Err(SayError::WrappedResponseError(
                         WrappedResponseError::InferenceError(
                             InferenceError::GenerateResponseError(
@@ -998,9 +1010,9 @@ impl<'a> Worker<'_, ChatWorker> {
                     ));
                 };
 
-                debug!("Found tool: {}", tool_name);
+                debug!("Found tool: {} with schema: {:?}", tool_name, tool.json_schema);
 
-                // Use grammar_from_tools to get the GBNF for this *one* tool
+                // Generate GBNF for this specific tool
                 let tool_grammar = grammar_from_tools(&[tool.clone()]).map_err(|e| {
                     error!(
                         "Failed to generate GBNF for forced tool '{}': {}",
@@ -1014,97 +1026,119 @@ impl<'a> Worker<'_, ChatWorker> {
                 })?;
 
                 let tool_rule_name = format!("tool_call_{}", tool_name);
-                debug!("Generated grammar for tool: {}", tool_name);
+                debug!("Generated {} grammar rules for tool '{}'", 
+                    tool_grammar.items.len(), tool_name);
 
-                // Extract rules - FIXED to avoid double iteration
+                // Extract and rename rules
                 for grammar_item in tool_grammar.items {
                     match grammar_item {
                         gbnf::GrammarItem::Rule(rule) => {
-                            if rule.lhs.name == "toolcall" {
-                                // This is the rule for the <tool_call> itself. Rename it.
-                                forced_tool_rules
-                                    .push(format!("{} ::= {}", tool_rule_name, rule.rhs));
-                            } else if rule.lhs.name != "superroot" {
-                                // Add all other dependent rules
-                                all_tool_gbnf_parts
-                                    .push(format!("{} ::= {}", rule.lhs.name, rule.rhs));
+                            let rule_name = rule.lhs.name.clone();
+
+                            if rule_name == "toolcall" {
+                                // This is the main tool call rule - rename it
+                                let rule_str = format!("{} ::= {}", tool_rule_name, rule.rhs);
+                                debug!("  Adding renamed rule: {}", &rule_str[..rule_str.len().min(100)]);
+                                forced_tool_rules.push(rule_str);
+                            } else if rule_name != "superroot" {
+                                // Dependent rules (json, ws, root, value, etc.)
+                                // Only add if we haven't seen this rule before
+                                if seen_rules.insert(rule_name.clone()) {
+                                    let rule_str = format!("{} ::= {}", rule_name, rule.rhs);
+                                    debug!("  Adding dependent rule: {}", rule_name);
+                                    all_tool_gbnf_parts.push(rule_str);
+                                }
                             }
                         }
-                        // Handle other GrammarItem variants
                         gbnf::GrammarItem::LineBreak => {
-                            // LineBreaks are formatting - preserve them
+                            // Preserve line breaks for formatting
                             all_tool_gbnf_parts.push(String::new());
                         }
                         gbnf::GrammarItem::Comment(comment_text) => {
-                            // Comments are documentation - can be preserved or ignored
-                            all_tool_gbnf_parts.push(format!("# {}", comment_text));
+                            // Preserve comments for documentation
+                            if seen_rules.insert(format!("comment_{}", all_tool_gbnf_parts.len())) {
+                                all_tool_gbnf_parts.push(format!("# {}", comment_text));
+                            }
                         }
                     }
                 }
             }
 
-            // De-duplicate the dependent rules (json, ws, etc.)
-            all_tool_gbnf_parts.sort();
-            all_tool_gbnf_parts.dedup();
+            debug!("Generated {} forced tool rules", forced_tool_rules.len());
+            debug!("Generated {} dependent rules", all_tool_gbnf_parts.len());
 
-            // 2. Build the new 'root' rule from the sequence
+            // 2. Build the root rule from the sequence
             let mut root_rule = "root ::= ".to_string();
 
-            // Add the prefix (if any)
+            // Add prefix if specified
             if !pass_1_sampler.manual_tool_prefix.is_empty() {
-                debug!(
-                    "Adding manual tool prefix: '{}'",
-                    pass_1_sampler.manual_tool_prefix
-                );
-                let escaped_prefix = format!("{:?}", pass_1_sampler.manual_tool_prefix);
-                root_rule.push_str(&escaped_prefix);
-                root_rule.push(' ');
+                debug!("Adding manual tool prefix: '{}'", pass_1_sampler.manual_tool_prefix);
+                // Escape the prefix as a GBNF string literal
+                let escaped_prefix = pass_1_sampler.manual_tool_prefix
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\t", "\\t");
+                root_rule.push_str(&format!("\"{}\" ", escaped_prefix));
             }
 
-            // Add the tool sequence with min/max repetition
+            // Build the tool sequence with repetition operators
             let mut tool_sequence_rules = Vec::new();
             for tool_call_config in &pass_1_sampler.manual_tool_sequence {
                 let tool_rule_name = format!("tool_call_{}", tool_call_config.tool_name);
-
-                // Build GBNF repetition string {min,max}
-                let repetition_str: String;
                 let min = tool_call_config.min_calls;
                 let max = tool_call_config.max_calls;
 
-                if min == 0 && max == 1 {
-                    repetition_str = "?".to_string(); // Optional, 0 or 1
+                // Generate GBNF repetition syntax
+                let repetition_str = if min == 0 && max == 1 {
+                    "?".to_string() // Optional (0 or 1)
                 } else if min == 1 && max == 1 {
-                    repetition_str = String::new(); // Required, exactly 1
+                    String::new() // Required exactly once
                 } else if max == -1 {
                     if min == 0 {
-                        repetition_str = "*".to_string(); // 0 or more
+                        "*".to_string() // 0 or more
                     } else if min == 1 {
-                        repetition_str = "+".to_string(); // 1 or more
+                        "+".to_string() // 1 or more
                     } else {
-                        repetition_str = format!("{{{},}}", min); // N or more
+                        // GBNF doesn't support {n,} syntax, so we need to expand it
+                        // For {2,}, we use: rule rule rule*
+                        let mut expanded = format!("{} ", tool_rule_name).repeat(min as usize);
+                        expanded.push_str(&format!("{}*", tool_rule_name));
+                        tool_sequence_rules.push(format!("( {} )", expanded));
+                        continue;
                     }
                 } else if max > 0 && max >= min {
-                    repetition_str = format!("{{{},{}}}", min, max); // Between N and M
+                    if min == max {
+                        // Exactly N times: just repeat the rule
+                        tool_sequence_rules.push(
+                            format!("( {} )", format!("{} ", tool_rule_name).repeat(max as usize).trim())
+                        );
+                        continue;
+                    } else {
+                        // Between N and M: expand to required + optional
+                        // {2,4} becomes: rule rule (rule)? (rule)?
+                        let mut expanded = format!("{} ", tool_rule_name).repeat(min as usize);
+                        for _ in min..max {
+                            expanded.push_str(&format!("({})? ", tool_rule_name));
+                        }
+                        tool_sequence_rules.push(format!("( {} )", expanded.trim()));
+                        continue;
+                    }
                 } else {
                     warn!(
-                        "Invalid min/max calls for tool '{}' (min: {}, max: {}). Defaulting to 1 call.",
+                        "Invalid min/max calls for tool '{}' (min: {}, max: {}). Defaulting to exactly 1.",
                         tool_call_config.tool_name, min, max
                     );
-                    repetition_str = String::new(); // Default to 1
-                }
+                    String::new() // Default to exactly 1
+                };
 
-                debug!(
-                    "Tool '{}' repetition: {}",
-                    tool_call_config.tool_name,
-                    if repetition_str.is_empty() {
-                        "exactly 1"
-                    } else {
-                        &repetition_str
-                    }
-                );
+                debug!("Tool '{}' repetition: {}", 
+                    tool_call_config.tool_name, 
+                    if repetition_str.is_empty() { "exactly 1" } else { &repetition_str });
 
-                tool_sequence_rules.push(format!("( {} ){}", tool_rule_name, repetition_str));
+                tool_sequence_rules.push(format!("{}{}", tool_rule_name, repetition_str));
             }
+
             root_rule.push_str(&tool_sequence_rules.join(" "));
 
             // 3. Assemble the final GBNF
@@ -1115,19 +1149,39 @@ impl<'a> Worker<'_, ChatWorker> {
                 all_tool_gbnf_parts.join("\n")
             );
 
-            debug!(
-                "Generated Manual Tool GBNF (first 500 chars):\n{}",
-                &final_gbnf[..std::cmp::min(500, final_gbnf.len())]
-            );
+            // Log the complete grammar (with length limits for console)
+            debug!("=== Generated Manual Tool GBNF ===");
+            debug!("Root rule: {}", root_rule);
+            debug!("Forced tool rules ({}): {}", 
+                forced_tool_rules.len(),
+                forced_tool_rules.iter().take(3).map(|r| &r[..r.len().min(80)]).collect::<Vec<_>>().join("; "));
+            debug!("Total GBNF length: {} characters", final_gbnf.len());
 
-            // 4. Set the pass_1_sampler to use this new GBNF
+            // Write full grammar to trace log
+            trace!("Complete GBNF:\n{}", final_gbnf);
+
+            // 4. Validate the grammar before using it
+            if forced_tool_rules.is_empty() {
+                error!("Failed to generate any tool rules! Grammar generation failed silently.");
+                return Err(SayError::WrappedResponseError(
+                    WrappedResponseError::InferenceError(
+                        InferenceError::GenerateResponseError(
+                            GenerateResponseError::InvalidSamplerConfig,
+                        ),
+                    ),
+                ));
+            }
+
+            // 5. Set the sampler to use this GBNF
             pass_1_sampler.use_grammar = true;
             pass_1_sampler.gbnf_grammar = final_gbnf;
             pass_1_sampler.grammar_root = "root".to_string();
+            pass_1_sampler.lazy_grammar_trigger = String::new(); // Disable lazy trigger for manual mode
 
             debug!("Manual tool calling configuration complete");
+
         } else if !pass_1_sampler.use_grammar {
-            // Manual calling is off, AND user grammar is off. Use default tool grammar.
+            // Default tool grammar behavior (original code)
             debug!("Using default tool grammar.");
             if let Some(ref tool_grammar) = self.extra.tool_grammar {
                 pass_1_sampler.use_grammar = true;
@@ -1171,10 +1225,8 @@ impl<'a> Worker<'_, ChatWorker> {
                     .chat_state
                     .add_tool_resp(tool_call.name, response);
             }
-
             // --- This is the new logic for Pass 2 ---
             // We now create the sampler for the *next* generation pass.
-
             // We use the *original* sampler config from Godot (`sampler`)
             // as the base for our Pass 2 sampler.
             let mut pass_2_sampler = sampler.clone();
