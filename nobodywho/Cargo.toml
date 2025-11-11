@@ -5,8 +5,5 @@ members = [
     "unity",
 ]
 
-[dependencies]
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
 # edition = "2021" implies resolver = "2".
 resolver = "2"
