@@ -985,239 +985,223 @@ impl<'a> Worker<'_, ChatWorker> {
                 ));
             }
 
-            // Collect only the tools specified in manual_tool_sequence
-            let mut selected_tools = Vec::new();
-            for tool_call_config in &pass_1_sampler.manual_tool_sequence {
-                let tool_name = &tool_call_config.tool_name;
-                debug!("Looking for tool: {}", tool_name);
+            // Use the existing tool grammar generation but modify it for forced calling
+            // First, ensure we have a tool grammar
+            if self.extra.tool_grammar.is_none() {
+                // Generate the tool grammar using existing method
+                let tool_call_schema = serde_json::json!({
+                    "oneOf": self.extra.tools.iter().map(|tool| {
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "enum": [tool.name.clone()]
+                                },
+                                "arguments": tool.json_schema.clone()
+                            },
+                            "required": ["name", "arguments"]
+                        })
+                    }).collect::<Vec<_>>()
+                });
 
-                let Some(tool) = self.extra.tools.iter().find(|t| t.name == *tool_name) else {
-                    error!("Manual Tool Call: Tool '{}' not found.", tool_name);
-                    error!(
-                        "Available tools: {:?}",
-                        self.extra.tools.iter().map(|t| &t.name).collect::<Vec<_>>()
-                    );
-                    return Err(SayError::WrappedResponseError(
-                        WrappedResponseError::InferenceError(
-                            InferenceError::GenerateResponseError(
-                                GenerateResponseError::InvalidSamplerConfig,
-                            ),
-                        ),
-                    ));
+                let json_grammar =
+                    match gbnf::Grammar::from_json_schema(&tool_call_schema.to_string()) {
+                        Ok(grammar) => grammar,
+                        Err(e) => {
+                            error!("Failed to create GBNF grammar from JSON schema: {}", e);
+                            return Err(SayError::WrappedResponseError(
+                                WrappedResponseError::InferenceError(
+                                    InferenceError::GenerateResponseError(
+                                        GenerateResponseError::InvalidSamplerConfig,
+                                    ),
+                                ),
+                            ));
+                        }
+                    };
+
+                // Store it temporarily
+                self.extra.tool_grammar = Some(json_grammar);
+            }
+
+            // Now create a forcing grammar based on the tool grammar
+            if let Some(ref tool_grammar) = self.extra.tool_grammar {
+                // Build a custom grammar that forces tool calls
+                let mut forced_grammar = gbnf::Grammar {
+                    items: vec![],
+                    recurring_items: Default::default(),
                 };
 
-                // Add tool only if not already added (handle duplicates in config)
-                if !selected_tools.iter().any(|t: &Tool| t.name == *tool_name) {
-                    selected_tools.push(tool.clone());
-                    debug!("Added tool: {}", tool_name);
+                // First, add all the existing grammar items EXCEPT root
+                for item in &tool_grammar.items {
+                    match item {
+                        gbnf::GrammarItem::Rule(rule) if rule.lhs.name != "root" => {
+                            forced_grammar.items.push(item.clone());
+                        }
+                        gbnf::GrammarItem::Comment(_) | gbnf::GrammarItem::LineBreak => {
+                            forced_grammar.items.push(item.clone());
+                        }
+                        _ => {} // Skip root rule
+                    }
                 }
-            }
 
-            debug!("Generating grammar for {} tools", selected_tools.len());
-
-            // Generate base grammar for the selected tools
-            let base_grammar = grammar_from_tools(&selected_tools).map_err(|e| {
-                error!("Failed to generate GBNF for tools: {}", e);
-                SayError::WrappedResponseError(WrappedResponseError::InferenceError(
-                    InferenceError::GenerateResponseError(
-                        GenerateResponseError::InvalidSamplerConfig,
-                    ),
-                ))
-            })?;
-
-            // Build custom grammar using gbnf crate directly
-            let mut custom_grammar = gbnf::Grammar {
-                items: Vec::new(),
-                recurring_items: Default::default(),
-            };
-
-            // 1. Build custom root rule with prefix and tool sequence
-            let mut root_production_items = Vec::new();
-
-            // Add prefix if specified
-            if !pass_1_sampler.manual_tool_prefix.is_empty() {
-                debug!("Adding manual tool prefix to grammar");
-                root_production_items.push(gbnf::ProductionItem::Terminal(
-                    gbnf::TerminalSymbol {
-                        value: pass_1_sampler.manual_tool_prefix.clone(),
-                    },
-                    gbnf::RepetitionType::One,
-                ));
-
-                // Add whitespace after prefix
-                root_production_items.push(gbnf::ProductionItem::NonTerminal(
-                    gbnf::NonTerminalSymbol { name: "ws".into() },
-                    gbnf::RepetitionType::One,
-                ));
-            }
-
-            // Add tool call sequence with proper repetition
-            for tool_call_config in &pass_1_sampler.manual_tool_sequence {
-                let min = tool_call_config.min_calls;
-                let max = tool_call_config.max_calls;
-
-                // Determine repetition type
-                let repetition = if min == 0 && max == 1 {
-                    gbnf::RepetitionType::ZeroOrOne
-                } else if min == 1 && max == 1 {
-                    gbnf::RepetitionType::One
-                } else if max == -1 {
-                    if min == 0 {
-                        gbnf::RepetitionType::ZeroOrMore
-                    } else if min == 1 {
-                        gbnf::RepetitionType::OneOrMore
+                // Find the original root rule's RHS to reuse as tool_json
+                let original_root_rhs = tool_grammar.items.iter().find_map(|item| {
+                    if let gbnf::GrammarItem::Rule(rule) = item {
+                        if rule.lhs.name == "root" {
+                            Some(rule.rhs.clone())
+                        } else {
+                            None
+                        }
                     } else {
-                        // For N or more (e.g., {2,}), we need to add N required toolcalls + one with *
-                        for _ in 0..min {
-                            root_production_items.push(gbnf::ProductionItem::NonTerminal(
+                        None
+                    }
+                });
+
+                if let Some(root_rhs) = original_root_rhs {
+                    // Add a tool_json rule that uses the original root
+                    forced_grammar
+                        .items
+                        .push(gbnf::GrammarItem::Rule(gbnf::Rule {
+                            lhs: gbnf::NonTerminalSymbol {
+                                name: "tool_json".into(),
+                            },
+                            rhs: root_rhs,
+                        }));
+
+                    // Create toolcall rule
+                    forced_grammar
+                        .items
+                        .push(gbnf::GrammarItem::Rule(gbnf::Rule {
+                            lhs: gbnf::NonTerminalSymbol {
+                                name: "toolcall".into(),
+                            },
+                            rhs: gbnf::Production {
+                                items: vec![
+                                    gbnf::ProductionItem::Terminal(
+                                        gbnf::TerminalSymbol {
+                                            value: "<tool_call>".into(),
+                                        },
+                                        gbnf::RepetitionType::One,
+                                    ),
+                                    gbnf::ProductionItem::NonTerminal(
+                                        gbnf::NonTerminalSymbol { name: "ws".into() },
+                                        gbnf::RepetitionType::One,
+                                    ),
+                                    gbnf::ProductionItem::NonTerminal(
+                                        gbnf::NonTerminalSymbol {
+                                            name: "tool_json".into(),
+                                        },
+                                        gbnf::RepetitionType::One,
+                                    ),
+                                    gbnf::ProductionItem::NonTerminal(
+                                        gbnf::NonTerminalSymbol { name: "ws".into() },
+                                        gbnf::RepetitionType::One,
+                                    ),
+                                    gbnf::ProductionItem::Terminal(
+                                        gbnf::TerminalSymbol {
+                                            value: "</tool_call>".into(),
+                                        },
+                                        gbnf::RepetitionType::One,
+                                    ),
+                                    gbnf::ProductionItem::NonTerminal(
+                                        gbnf::NonTerminalSymbol { name: "ws".into() },
+                                        gbnf::RepetitionType::One,
+                                    ),
+                                ],
+                            },
+                        }));
+
+                    // Create the root rule based on requirements
+                    let mut root_items = Vec::new();
+
+                    // Add prefix if specified
+                    if !pass_1_sampler.manual_tool_prefix.is_empty() {
+                        root_items.push(gbnf::ProductionItem::Terminal(
+                            gbnf::TerminalSymbol {
+                                value: pass_1_sampler.manual_tool_prefix.clone(),
+                            },
+                            gbnf::RepetitionType::One,
+                        ));
+                        root_items.push(gbnf::ProductionItem::NonTerminal(
+                            gbnf::NonTerminalSymbol { name: "ws".into() },
+                            gbnf::RepetitionType::One,
+                        ));
+                    }
+
+                    // Calculate total minimum calls
+                    let total_min: i32 = pass_1_sampler
+                        .manual_tool_sequence
+                        .iter()
+                        .map(|tc| tc.min_calls)
+                        .sum();
+
+                    // Add tool calls based on requirements
+                    if total_min == 0 {
+                        // Optional tool calls
+                        root_items.push(gbnf::ProductionItem::NonTerminal(
+                            gbnf::NonTerminalSymbol {
+                                name: "toolcall".into(),
+                            },
+                            gbnf::RepetitionType::ZeroOrMore,
+                        ));
+                    } else if total_min == 1 {
+                        // One required, possibly more
+                        root_items.push(gbnf::ProductionItem::NonTerminal(
+                            gbnf::NonTerminalSymbol {
+                                name: "toolcall".into(),
+                            },
+                            gbnf::RepetitionType::OneOrMore,
+                        ));
+                    } else {
+                        // Multiple required
+                        for _ in 0..total_min.min(3) {
+                            // Cap at 3 to avoid huge grammars
+                            root_items.push(gbnf::ProductionItem::NonTerminal(
                                 gbnf::NonTerminalSymbol {
                                     name: "toolcall".into(),
                                 },
                                 gbnf::RepetitionType::One,
                             ));
                         }
-                        root_production_items.push(gbnf::ProductionItem::NonTerminal(
+                        // Allow more if needed
+                        root_items.push(gbnf::ProductionItem::NonTerminal(
                             gbnf::NonTerminalSymbol {
                                 name: "toolcall".into(),
                             },
                             gbnf::RepetitionType::ZeroOrMore,
                         ));
-                        continue;
                     }
-                } else if max > 0 && max >= min {
-                    // Between N and M: add N required + (M-N) optional
-                    for _ in 0..min {
-                        root_production_items.push(gbnf::ProductionItem::NonTerminal(
-                            gbnf::NonTerminalSymbol {
-                                name: "toolcall".into(),
+
+                    // Add the new root rule
+                    forced_grammar.items.insert(
+                        0,
+                        gbnf::GrammarItem::Rule(gbnf::Rule {
+                            lhs: gbnf::NonTerminalSymbol {
+                                name: "root".into(),
                             },
-                            gbnf::RepetitionType::One,
-                        ));
-                    }
-                    for _ in min..max {
-                        root_production_items.push(gbnf::ProductionItem::NonTerminal(
-                            gbnf::NonTerminalSymbol {
-                                name: "toolcall".into(),
-                            },
-                            gbnf::RepetitionType::ZeroOrOne,
-                        ));
-                    }
-                    continue;
-                } else {
-                    warn!(
-                        "Invalid min/max for tool '{}', defaulting to 1",
-                        tool_call_config.tool_name
+                            rhs: gbnf::Production { items: root_items },
+                        }),
                     );
-                    gbnf::RepetitionType::One
-                };
 
-                root_production_items.push(gbnf::ProductionItem::NonTerminal(
-                    gbnf::NonTerminalSymbol {
-                        name: "toolcall".into(),
-                    },
-                    repetition,
-                ));
-            }
+                    let final_grammar = forced_grammar.to_string();
 
-            // Create the custom root rule
-            custom_grammar
-                .items
-                .push(gbnf::GrammarItem::Rule(gbnf::Rule {
-                    lhs: gbnf::NonTerminalSymbol {
-                        name: "root".into(),
-                    },
-                    rhs: gbnf::Production {
-                        items: root_production_items,
-                    },
-                }));
+                    debug!(
+                        "Generated forced tool grammar length: {} chars",
+                        final_grammar.len()
+                    );
+                    debug!(
+                        "First 500 chars:\n{}",
+                        &final_grammar[..final_grammar.len().min(500)]
+                    );
 
-            // 2. Create modified toolcall rule (referencing tool_json_schema)
-            let ws = gbnf::ProductionItem::NonTerminal(
-                gbnf::NonTerminalSymbol { name: "ws".into() },
-                gbnf::RepetitionType::One,
-            );
-
-            custom_grammar
-                .items
-                .push(gbnf::GrammarItem::Rule(gbnf::Rule {
-                    lhs: gbnf::NonTerminalSymbol {
-                        name: "toolcall".into(),
-                    },
-                    rhs: gbnf::Production {
-                        items: vec![
-                            gbnf::ProductionItem::Terminal(
-                                gbnf::TerminalSymbol {
-                                    value: "<tool_call>".into(),
-                                },
-                                gbnf::RepetitionType::One,
-                            ),
-                            ws.clone(),
-                            gbnf::ProductionItem::NonTerminal(
-                                gbnf::NonTerminalSymbol {
-                                    name: "tool_json_schema".into(),
-                                },
-                                gbnf::RepetitionType::One,
-                            ),
-                            ws.clone(),
-                            gbnf::ProductionItem::Terminal(
-                                gbnf::TerminalSymbol {
-                                    value: "</tool_call>".into(),
-                                },
-                                gbnf::RepetitionType::One,
-                            ),
-                            ws.clone(),
-                        ],
-                    },
-                }));
-
-            // 3. Copy all rules from base_grammar EXCEPT root, superroot, and toolcall
-            //    Rename the original "root" to "tool_json_schema"
-            for item in base_grammar.items {
-                match item {
-                    gbnf::GrammarItem::Rule(rule) => {
-                        if rule.lhs.name == "root" {
-                            // Rename the JSON schema root to avoid circular reference
-                            custom_grammar
-                                .items
-                                .push(gbnf::GrammarItem::Rule(gbnf::Rule {
-                                    lhs: gbnf::NonTerminalSymbol {
-                                        name: "tool_json_schema".into(),
-                                    },
-                                    rhs: rule.rhs,
-                                }));
-                        } else if rule.lhs.name == "toolcall" || rule.lhs.name == "superroot" {
-                            // Skip - we've already created our own toolcall and don't need superroot
-                            debug!("Skipping original {} rule", rule.lhs.name);
-                        } else {
-                            // Copy all other rules as-is (ws, string, value, etc.)
-                            custom_grammar.items.push(gbnf::GrammarItem::Rule(rule));
-                        }
-                    }
-                    gbnf::GrammarItem::LineBreak => {
-                        custom_grammar.items.push(gbnf::GrammarItem::LineBreak);
-                    }
-                    gbnf::GrammarItem::Comment(comment) => {
-                        custom_grammar
-                            .items
-                            .push(gbnf::GrammarItem::Comment(comment));
-                    }
+                    // Set the grammar
+                    pass_1_sampler.use_grammar = true;
+                    pass_1_sampler.gbnf_grammar = final_grammar;
+                    pass_1_sampler.grammar_root = "root".to_string();
+                    pass_1_sampler.lazy_grammar_trigger = String::new();
                 }
             }
-
-            let final_grammar = custom_grammar.to_string();
-
-            debug!("Generated GBNF length: {} chars", final_grammar.len());
-            debug!(
-                "First 300 chars:\n{}",
-                &final_grammar[..final_grammar.len().min(300)]
-            );
-            trace!("Complete GBNF:\n{}", final_grammar);
-
-            // Set the grammar
-            pass_1_sampler.use_grammar = true;
-            pass_1_sampler.gbnf_grammar = final_grammar;
-            pass_1_sampler.grammar_root = "root".to_string();
-            pass_1_sampler.lazy_grammar_trigger = String::new(); // No lazy trigger for forced calls
 
             debug!("Manual tool calling configuration complete");
         } else if !pass_1_sampler.use_grammar {
