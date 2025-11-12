@@ -695,114 +695,6 @@ fn grammar_from_tools(tools: &[Tool]) -> Result<gbnf::Grammar, gbnf::json::JsonS
     Ok(json_grammar)
 }
 
-/// Generate GBNF grammar for forced tool calling with filtered tool list
-fn grammar_from_forced_tool_sequence(
-    all_tools: &[Tool],
-    available_tool_names: &[String],
-) -> Result<gbnf::Grammar, gbnf::json::JsonSchemaParseError> {
-    // Filter tools to only those that are available (haven't hit max_calls)
-    let available_tools: Vec<&Tool> = all_tools
-        .iter()
-        .filter(|tool| available_tool_names.contains(&tool.name))
-        .collect();
-
-    // Get a json schema that describes the tool call for each available tool
-    let tool_call_schemas: serde_json::Value = available_tools
-        .iter()
-        .map(|tool| {
-            serde_json::json!(
-                {
-                    "type": "object",
-                    "properties": {
-                        "name": { "const": tool.name, },
-                        "arguments": tool.json_schema
-                    },
-                    "required": ["name", "arguments"]
-                }
-            )
-        })
-        .collect();
-
-    // A json schema that describes any of the tool calls
-    let tool_call_schema = serde_json::json!(
-        { "oneOf": tool_call_schemas }
-    );
-
-    // A GBNF grammar for the above
-    let mut json_grammar = match gbnf::Grammar::from_json_schema(&tool_call_schema.to_string()) {
-        Ok(jg) => jg,
-        Err(e) => {
-            warn!("Failed generating forced tool grammar. Probably because of a bad json schema: {e:?}.");
-            return Err(e);
-        }
-    };
-
-    // Optional whitespace
-    let ws = gbnf::ProductionItem::NonTerminal(
-        gbnf::NonTerminalSymbol { name: "ws".into() },
-        gbnf::RepetitionType::One,
-    );
-
-    // Wrap the newly generated grammar's root in tool calling tokens
-    // e.g. <tool_call> json_grammar </tool_call>
-    let tool_call_rule = gbnf::GrammarItem::Rule(gbnf::Rule {
-        lhs: gbnf::NonTerminalSymbol {
-            name: "forced_toolcall".into(),
-        },
-        rhs: gbnf::Production {
-            items: vec![
-                // tool call begin
-                gbnf::ProductionItem::Terminal(
-                    gbnf::TerminalSymbol {
-                        value: "<tool_call>".into(),
-                    },
-                    gbnf::RepetitionType::One,
-                ),
-                // optional whitespace
-                ws.clone(),
-                // tool call json, just refer to the grammar we made from json schema
-                gbnf::ProductionItem::NonTerminal(
-                    gbnf::NonTerminalSymbol {
-                        name: "root".into(),
-                    },
-                    gbnf::RepetitionType::One,
-                ),
-                // optional whitespace
-                ws.clone(),
-                // </tool_call>
-                gbnf::ProductionItem::Terminal(
-                    gbnf::TerminalSymbol {
-                        value: "</tool_call>".into(),
-                    },
-                    gbnf::RepetitionType::One,
-                ),
-                // optional whitespace
-                ws.clone(),
-            ],
-        },
-    });
-
-    // One or more forced tool calls
-    let forced_root_rule = gbnf::GrammarItem::Rule(gbnf::Rule {
-        lhs: gbnf::NonTerminalSymbol {
-            name: "forced_root".into(),
-        },
-        rhs: gbnf::Production {
-            items: vec![gbnf::ProductionItem::NonTerminal(
-                gbnf::NonTerminalSymbol {
-                    name: "forced_toolcall".into(),
-                },
-                gbnf::RepetitionType::OneOrMore,
-            )],
-        },
-    });
-
-    json_grammar.items.push(tool_call_rule);
-    json_grammar.items.push(forced_root_rule);
-
-    Ok(json_grammar)
-}
-
 // TOOL CHAT WORKER
 
 struct ChatWorker {
@@ -1129,11 +1021,22 @@ impl<'a> Worker<'_, ChatWorker> {
                     break;
                 }
 
-                // Generate grammar for available tools
-                let forced_grammar = match grammar_from_forced_tool_sequence(
-                    &self.extra.tools,
-                    &available_tool_names,
-                ) {
+                // Filter tools to only available ones
+                let available_tools: Vec<Tool> = self
+                    .extra
+                    .tools
+                    .iter()
+                    .filter(|t| available_tool_names.contains(&t.name))
+                    .cloned()
+                    .collect();
+
+                if available_tools.is_empty() {
+                    warn!("No available tools remaining - breaking forced tool loop");
+                    break;
+                }
+
+                // Generate grammar using the same function as normal tool calling
+                let forced_grammar = match grammar_from_tools(&available_tools) {
                     Ok(g) => g,
                     Err(e) => {
                         error!("Failed generating forced tool grammar: {e:?}. Falling back to normal generation.");
@@ -1144,7 +1047,7 @@ impl<'a> Worker<'_, ChatWorker> {
                 // Set up sampler with forced grammar
                 let mut forced_sampler = sampler.clone();
                 forced_sampler.use_grammar = true;
-                forced_sampler.grammar_root = "forced_root".into();
+                forced_sampler.grammar_root = "superroot".into();
                 forced_sampler.lazy_grammar_trigger = "<tool_call>".into();
                 forced_sampler.gbnf_grammar = forced_grammar.to_string();
 
