@@ -105,21 +105,6 @@ impl ToolCallTracker {
             false
         }
     }
-
-    /// Get list of tool names that can still be called
-    fn get_available_tools(&self) -> Vec<String> {
-        self.counts
-            .iter()
-            .filter(|(_name, (current, _min, max))| {
-                if *max == -1 {
-                    *current < 10
-                } else {
-                    current < max
-                }
-            })
-            .map(|(name, _)| name.clone())
-            .collect()
-    }
 }
 
 /// Filter tools to only those that can still be called according to tracker
@@ -711,7 +696,8 @@ fn grammar_from_tools(tools: &[Tool]) -> Result<gbnf::Grammar, gbnf::json::JsonS
         },
     });
 
-    // one or more tool calls
+    // exactly one tool call (not one or more)
+    // This enforces one tool call per generation pass, allowing max_calls to be respected
     let new_root_rule = gbnf::GrammarItem::Rule(gbnf::Rule {
         lhs: gbnf::NonTerminalSymbol {
             name: "superroot".into(),
@@ -721,7 +707,7 @@ fn grammar_from_tools(tools: &[Tool]) -> Result<gbnf::Grammar, gbnf::json::JsonS
                 gbnf::NonTerminalSymbol {
                     name: "toolcall".into(),
                 },
-                gbnf::RepetitionType::OneOrMore,
+                gbnf::RepetitionType::One,
             )],
         },
     });
@@ -1050,24 +1036,24 @@ impl<'a> Worker<'_, ChatWorker> {
             let mut tracker = ToolCallTracker::new(&sampler.manual_tool_sequence);
             let mut iteration = 0;
 
-            // Phase A: Optional prefix generation (hidden from client)
+            // Phase A: Optional prefix injection (NOT generation)
             if !sampler.manual_tool_prefix.is_empty() {
-                info!("Generating manual tool prefix");
+                info!("Injecting manual tool prefix into context");
 
-                // Create a sampler without grammar for prefix generation
-                let mut prefix_sampler = sampler.clone();
-                prefix_sampler.use_grammar = false;
-                prefix_sampler.lazy_grammar_trigger = String::new();
+                // Tokenize the prefix string
+                let prefix_tokens = self
+                    .ctx
+                    .model
+                    .str_to_token(&sampler.manual_tool_prefix, AddBos::Never)?;
 
-                // Generate prefix, stopping at first <tool_call>
-                let prefix_response = self.wrapped_update_context_and_generate_response(
-                    prefix_sampler,
-                    vec![tool_call_begin.to_string()],
-                    |_| {}, // Don't emit prefix tokens to client
-                    tool_call_begin.into(),
-                )?;
+                debug!("Injecting {} prefix tokens", prefix_tokens.len());
 
-                debug!("Generated prefix: {}", prefix_response);
+                // Get the inference lock and inject tokens directly into context
+                let _gil_guard = GLOBAL_INFERENCE_LOCK.lock();
+                let inference_lock_token = _gil_guard.unwrap();
+                self.read_tokens(prefix_tokens, &inference_lock_token)?;
+
+                debug!("Injected prefix: {}", sampler.manual_tool_prefix);
             }
 
             // Phase B: Forced tool call loop
@@ -1132,6 +1118,23 @@ impl<'a> Worker<'_, ChatWorker> {
 
                     // Execute each tool and update tracker
                     for tool_call in tool_calls {
+                        // Check if this tool can still be called (hasn't exceeded max)
+                        if !tracker.can_call_tool(&tool_call.name) {
+                            warn!(
+                                "Tool {} has reached max calls, skipping execution",
+                                tool_call.name
+                            );
+                            // Add error message to chat history
+                            let errmsg = format!(
+                                "ERROR - Tool {} has reached maximum allowed calls",
+                                tool_call.name
+                            );
+                            self.extra
+                                .chat_state
+                                .add_tool_resp(tool_call.name.clone(), errmsg);
+                            continue;
+                        }
+
                         // Find the tool
                         let Some(tool) = self.extra.tools.iter().find(|t| t.name == tool_call.name)
                         else {
@@ -1199,6 +1202,9 @@ impl<'a> Worker<'_, ChatWorker> {
 
             // Apply regular grammar if specified
             if sampler.use_grammar && !sampler.gbnf_grammar.is_empty() {
+                warn!(
+                    "Using custom grammar in continuation. Ensure grammar allows natural termination to avoid loops."
+                );
                 continuation_sampler.use_grammar = true;
                 // Use the user-specified grammar, not tool grammar
                 continuation_sampler.gbnf_grammar = sampler.gbnf_grammar.clone();
@@ -1214,9 +1220,19 @@ impl<'a> Worker<'_, ChatWorker> {
 
             // Generate continuation (this is streamed to client)
             info!("Generating continuation after forced tools");
+
+            // Add grammar-specific stop words if using custom grammar
+            // This helps prevent infinite loops when grammar doesn't include proper termination
+            let mut continuation_stop_words = stop_words.clone();
+            if sampler.use_grammar && !sampler.gbnf_grammar.is_empty() {
+                // Common termination tokens that should end generation
+                continuation_stop_words.push("\"".to_string()); // Closing quote from speech patterns
+                continuation_stop_words.push("\n\n".to_string()); // Double newline
+            }
+
             let mut response = self.wrapped_update_context_and_generate_response(
                 continuation_sampler.clone(),
-                stop_words.clone(),
+                continuation_stop_words.clone(),
                 respond.clone(),
                 tool_call_begin.into(),
             )?;
@@ -1250,7 +1266,7 @@ impl<'a> Worker<'_, ChatWorker> {
                 // Continue generation after lazy tool calls
                 response = self.wrapped_update_context_and_generate_response(
                     continuation_sampler.clone(),
-                    stop_words.clone(),
+                    continuation_stop_words.clone(),
                     respond.clone(),
                     tool_call_begin.into(),
                 )?;

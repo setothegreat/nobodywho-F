@@ -194,6 +194,12 @@ pub enum SayError {
 
     #[error("Error creating response: {0}")]
     WrappedResponseError(#[from] WrappedResponseError),
+
+    #[error("Error tokenizing string: {0}")]
+    TokenizationError(#[from] llama_cpp_2::StringToTokenError),
+
+    #[error("Error reading tokens: {0}")]
+    ReadError(#[from] ReadError),
 }
 
 #[derive(Debug, thiserror::Error)]
