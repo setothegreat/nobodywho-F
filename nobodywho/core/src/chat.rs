@@ -879,8 +879,21 @@ impl<'a> Worker<'_, ChatWorker> {
             .ok_or(GenerateResponseError::InvalidSamplerConfig)?;
 
         let mut token_bytes_vec = Vec::new();
+        let mut iteration_count = 0;
 
         while !self.should_stop() {
+            iteration_count += 1;
+
+            // Log every 10 iterations to avoid excessive logging
+            if iteration_count % 10 == 0 {
+                trace!(
+                    "Token generation iteration {}, n_past: {}, tokens generated: {}",
+                    iteration_count,
+                    self.n_past,
+                    tokens_written_until_now.len()
+                );
+            }
+
             // Check if the context is full
             if self.n_past as u32 == self.ctx.n_ctx() {
                 self.context_shift()?;
@@ -900,8 +913,19 @@ impl<'a> Worker<'_, ChatWorker> {
             // Sample next token, no need to use sampler.accept as sample already accepts the token.
             // using sampler.accept() will cause the sampler to crash when using grammar sampling.
             // https://github.com/utilityai/llama-cpp-rs/issues/604
-            trace!("Applying sampler...");
+            trace!("Applying sampler at iteration {}...", iteration_count);
+            debug!(
+                "About to sample token at iteration {}, n_past: {}",
+                iteration_count, self.n_past
+            );
+
             let new_token = self.sample_and_decode_next_token(&mut sampler)?;
+
+            debug!(
+                "Sampled token {} at iteration {}",
+                new_token, iteration_count
+            );
+
             tokens_written_until_now.push(new_token);
 
             // Attempt to convert token(s) to bytes
@@ -1009,7 +1033,15 @@ impl<'a> Worker<'_, ChatWorker> {
             let mut tracker = ToolCallTracker::new(&sampler.manual_tool_sequence);
 
             // Auto-prepend manual_tool_prefix (hidden from user but in context)
+            // The prefix is injected directly without model generation
             let mut accumulated_response = sampler.manual_tool_prefix.clone();
+
+            if !sampler.manual_tool_prefix.is_empty() {
+                info!(
+                    "Injecting manual_tool_prefix into response: {} chars",
+                    sampler.manual_tool_prefix.len()
+                );
+            }
 
             // Loop until all min_calls constraints are met
             while !tracker.all_mins_met() {
@@ -1044,12 +1076,21 @@ impl<'a> Worker<'_, ChatWorker> {
                     }
                 };
 
-                // Set up sampler with forced grammar
+                // Set up sampler with forced grammar AND LAZY TRIGGER
+                // Using lazy trigger allows the model to generate naturally until <tool_call>,
+                // then grammar constrains the tool call JSON to be valid
                 let mut forced_sampler = sampler.clone();
                 forced_sampler.use_grammar = true;
                 forced_sampler.grammar_root = "superroot".into();
-                forced_sampler.lazy_grammar_trigger = String::new(); // No lazy trigger - force immediate tool calling
+                forced_sampler.lazy_grammar_trigger = "<tool_call>".into(); // USE LAZY TRIGGER - grammar activates when model generates this
                 forced_sampler.gbnf_grammar = forced_grammar.to_string();
+
+                debug!(
+                    "About to generate with forced grammar. Lazy trigger: '{}', Grammar root: '{}', Grammar length: {} bytes",
+                    forced_sampler.lazy_grammar_trigger,
+                    forced_sampler.grammar_root,
+                    forced_sampler.gbnf_grammar.len()
+                );
 
                 // Generate response with forced tools
                 let response = self.wrapped_update_context_and_generate_response(
@@ -1058,6 +1099,11 @@ impl<'a> Worker<'_, ChatWorker> {
                     respond.clone(),
                     tool_call_begin.into(),
                 )?;
+
+                debug!(
+                    "Generated response with forced tools, length: {} chars",
+                    response.len()
+                );
 
                 accumulated_response.push_str(&response);
 
