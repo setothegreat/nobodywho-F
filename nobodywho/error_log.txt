@@ -1,36 +1,395 @@
-2025-11-11T23:57:22.734116Z  INFO nobodywho::chat: Worker writing until done
-parse: error parsing grammar: expecting ::= at _toolcall ::= "<tool_call>" ws root ws "</tool_call>" ws
-forced_root ::= forced_toolcall+
-boolean ::= "true" | "false" ws
-integer ::= ("-"? ([0-9] | [1-9] [0-9]*)) ws
-null ::= "null" ws
-number ::= ("-"? ([0-9] | [1-9] [0-9]*)) ("." [0-9]+)? ([eE] [-+]? [0-9]+)? ws
-string ::= "\"" ([^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]))* "\"" ws
-ws ::= [ \t\n]*
+2025-11-12T00:20:01.956021Z  INFO nobodywho::chat: Using forced tool calling mode
+2025-11-12T00:20:02.604774Z  INFO nobodywho::chat: Worker writing until done
+Grammar still awaiting trigger after token 151667 (`<think>`)
+Grammar still awaiting trigger after token 198 (`
+`)
+Grammar still awaiting trigger after token 32313 (`Okay`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 1196 (` user`)
+Grammar still awaiting trigger after token 1053 (` said`)
+Grammar still awaiting trigger after token 330 (` "`)
+Grammar still awaiting trigger after token 9707 (`Hello`)
+Grammar still awaiting trigger after token 13509 (` Kim`)
+Grammar still awaiting trigger after token 6215 (`ora`)
+Grammar still awaiting trigger after token 1189 (`."`)
+Grammar still awaiting trigger after token 358 (` I`)
+Grammar still awaiting trigger after token 1184 (` need`)
+Grammar still awaiting trigger after token 311 (` to`)
+Grammar still awaiting trigger after token 5889 (` respond`)
+Grammar still awaiting trigger after token 438 (` as`)
+Grammar still awaiting trigger after token 13509 (` Kim`)
+Grammar still awaiting trigger after token 6215 (`ora`)
+Grammar still awaiting trigger after token 5017 (` LO`)
+Grammar still awaiting trigger after token 28521 (`UIS`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 6771 (` Let`)
+Grammar still awaiting trigger after token 752 (` me`)
+Grammar still awaiting trigger after token 1191 (` start`)
+Grammar still awaiting trigger after token 553 (` by`)
+Grammar still awaiting trigger after token 1667 (` using`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 6099 (` remember`)
+Grammar still awaiting trigger after token 5392 (` tool`)
+Grammar still awaiting trigger after token 311 (` to`)
+Grammar still awaiting trigger after token 1779 (` check`)
+Grammar still awaiting trigger after token 421 (` if`)
+Grammar still awaiting trigger after token 1052 (` there`)
+Grammar still awaiting trigger after token 594 (`'s`)
+Grammar still awaiting trigger after token 894 (` any`)
+Grammar still awaiting trigger after token 6350 (` existing`)
+Grammar still awaiting trigger after token 1995 (` information`)
+Grammar still awaiting trigger after token 911 (` about`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 1196 (` user`)
+Grammar still awaiting trigger after token 476 (` or`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 2266 (` context`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 8704 (` Since`)
+Grammar still awaiting trigger after token 432 (` it`)
+Grammar still awaiting trigger after token 594 (`'s`)
+Grammar still awaiting trigger after token 264 (` a`)
+Grammar still awaiting trigger after token 4285 (` simple`)
+Grammar still awaiting trigger after token 42113 (` greeting`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 7196 (` maybe`)
+Grammar still awaiting trigger after token 1052 (` there`)
+Grammar still awaiting trigger after token 594 (`'s`)
+Grammar still awaiting trigger after token 537 (` not`)
+Grammar still awaiting trigger after token 1753 (` much`)
+Grammar still awaiting trigger after token 304 (` in`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 4938 (` memory`)
+Grammar still awaiting trigger after token 3602 (` yet`)
+Grammar still awaiting trigger after token 382 (`.
 
+`)
+Grammar still awaiting trigger after token 40 (`I`)
+Grammar still awaiting trigger after token 1265 (` should`)
+Grammar still awaiting trigger after token 2908 (` consider`)
+Grammar still awaiting trigger after token 13509 (` Kim`)
+Grammar still awaiting trigger after token 6215 (`ora`)
+Grammar still awaiting trigger after token 594 (`'s`)
+Grammar still awaiting trigger after token 17294 (` personality`)
+Grammar still awaiting trigger after token 24055 (` traits`)
+Grammar still awaiting trigger after token 25 (`:`)
+Grammar still awaiting trigger after token 1340 (` she`)
+Grammar still awaiting trigger after token 594 (`'s`)
+Grammar still awaiting trigger after token 74236 (` pragmatic`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 14400 (` somewhat`)
+Grammar still awaiting trigger after token 70314 (` cheerful`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 714 (` but`)
+Grammar still awaiting trigger after token 1083 (` also`)
+Grammar still awaiting trigger after token 72523 (` pessim`)
+Grammar still awaiting trigger after token 4532 (`istic`)
+Grammar still awaiting trigger after token 323 (` and`)
+Grammar still awaiting trigger after token 45778 (` cautious`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 2932 (` She`)
+Grammar still awaiting trigger after token 2578 (` might`)
+Grammar still awaiting trigger after token 5889 (` respond`)
+Grammar still awaiting trigger after token 80767 (` politely`)
+Grammar still awaiting trigger after token 714 (` but`)
+Grammar still awaiting trigger after token 448 (` with`)
+Grammar still awaiting trigger after token 264 (` a`)
+Grammar still awaiting trigger after token 13012 (` hint`)
+Grammar still awaiting trigger after token 315 (` of`)
+Grammar still awaiting trigger after token 20499 (` reserve`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 7281 (` Also`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 1340 (` she`)
+Grammar still awaiting trigger after token 594 (`'s`)
+Grammar still awaiting trigger after token 264 (` a`)
+Grammar still awaiting trigger after token 2477 (` non`)
+Grammar still awaiting trigger after token 27826 (`-profit`)
+Grammar still awaiting trigger after token 11864 (` worker`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 773 (` so`)
+Grammar still awaiting trigger after token 7196 (` maybe`)
+Grammar still awaiting trigger after token 1340 (` she`)
+Grammar still awaiting trigger after token 594 (`'s`)
+Grammar still awaiting trigger after token 10735 (` focused`)
+Grammar still awaiting trigger after token 389 (` on`)
+Grammar still awaiting trigger after token 14976 (` practical`)
+Grammar still awaiting trigger after token 12850 (` matters`)
+Grammar still awaiting trigger after token 382 (`.
 
-################################################
-# DYNAMICALLY GENERATED JSON-SCHEMA GRAMMAR
-################################################
+`)
+Grammar still awaiting trigger after token 785 (`The`)
+Grammar still awaiting trigger after token 1196 (` user`)
+Grammar still awaiting trigger after token 594 (`'s`)
+Grammar still awaiting trigger after token 1943 (` message`)
+Grammar still awaiting trigger after token 374 (` is`)
+Grammar still awaiting trigger after token 1101 (` just`)
+Grammar still awaiting trigger after token 264 (` a`)
+Grammar still awaiting trigger after token 42113 (` greeting`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 773 (` so`)
+Grammar still awaiting trigger after token 13509 (` Kim`)
+Grammar still awaiting trigger after token 6215 (`ora`)
+Grammar still awaiting trigger after token 2578 (` might`)
+Grammar still awaiting trigger after token 24645 (` acknowledge`)
+Grammar still awaiting trigger after token 432 (` it`)
+Grammar still awaiting trigger after token 323 (` and`)
+Grammar still awaiting trigger after token 2548 (` ask`)
+Grammar still awaiting trigger after token 1246 (` how`)
+Grammar still awaiting trigger after token 1340 (` she`)
+Grammar still awaiting trigger after token 646 (` can`)
+Grammar still awaiting trigger after token 7789 (` assist`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 1988 (` But`)
+Grammar still awaiting trigger after token 2661 (` given`)
+Grammar still awaiting trigger after token 1059 (` her`)
+Grammar still awaiting trigger after token 24055 (` traits`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 1340 (` she`)
+Grammar still awaiting trigger after token 2578 (` might`)
+Grammar still awaiting trigger after token 537 (` not`)
+Grammar still awaiting trigger after token 387 (` be`)
+Grammar still awaiting trigger after token 38432 (` overly`)
+Grammar still awaiting trigger after token 41602 (` enthusiastic`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 2932 (` She`)
+Grammar still awaiting trigger after token 1410 (` could`)
+Grammar still awaiting trigger after token 387 (` be`)
+Grammar still awaiting trigger after token 2118 (` direct`)
+Grammar still awaiting trigger after token 323 (` and`)
+Grammar still awaiting trigger after token 311 (` to`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 1459 (` point`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 7196 (` maybe`)
+Grammar still awaiting trigger after token 264 (` a`)
+Grammar still awaiting trigger after token 2699 (` bit`)
+Grammar still awaiting trigger after token 48670 (` blunt`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 6771 (` Let`)
+Grammar still awaiting trigger after token 752 (` me`)
+Grammar still awaiting trigger after token 1281 (` make`)
+Grammar still awaiting trigger after token 2704 (` sure`)
+Grammar still awaiting trigger after token 311 (` to`)
+Grammar still awaiting trigger after token 2506 (` keep`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 2033 (` response`)
+Grammar still awaiting trigger after token 304 (` in`)
+Grammar still awaiting trigger after token 1555 (` line`)
+Grammar still awaiting trigger after token 448 (` with`)
+Grammar still awaiting trigger after token 1059 (` her`)
+Grammar still awaiting trigger after token 8201 (` attributes`)
+Grammar still awaiting trigger after token 382 (`.
 
-symbol2-name-value ::= "\"remember\""
-symbol4-query-value ::= string ws
-symbol3-arguments-value ::= "{" ws "\"query\"" ws ":" ws symbol4-query-value "}" ws
-symbol-1-oneof-0 ::= "{" ws "\"name\"" ws ":" ws symbol2-name-value "," ws "\"arguments\"" ws ":" ws symbol3-arguments-value "}" ws
-root ::= symbol-1-oneof-0
+`)
+Grammar still awaiting trigger after token 12549 (`Since`)
+Grammar still awaiting trigger after token 1052 (` there`)
+Grammar still awaiting trigger after token 594 (`'s`)
+Grammar still awaiting trigger after token 902 (` no`)
+Grammar still awaiting trigger after token 3151 (` specific`)
+Grammar still awaiting trigger after token 1995 (` information`)
+Grammar still awaiting trigger after token 311 (` to`)
+Grammar still awaiting trigger after token 19091 (` recall`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 6099 (` remember`)
+Grammar still awaiting trigger after token 5392 (` tool`)
+Grammar still awaiting trigger after token 2578 (` might`)
+Grammar still awaiting trigger after token 537 (` not`)
+Grammar still awaiting trigger after token 7540 (` yield`)
+Grammar still awaiting trigger after token 4113 (` anything`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 2055 (` So`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 2033 (` response`)
+Grammar still awaiting trigger after token 1265 (` should`)
+Grammar still awaiting trigger after token 387 (` be`)
+Grammar still awaiting trigger after token 264 (` a`)
+Grammar still awaiting trigger after token 5297 (` standard`)
+Grammar still awaiting trigger after token 42113 (` greeting`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 10767 (` possibly`)
+Grammar still awaiting trigger after token 448 (` with`)
+Grammar still awaiting trigger after token 264 (` a`)
+Grammar still awaiting trigger after token 3405 (` question`)
+Grammar still awaiting trigger after token 311 (` to`)
+Grammar still awaiting trigger after token 9934 (` prompt`)
+Grammar still awaiting trigger after token 4623 (` further`)
+Grammar still awaiting trigger after token 16230 (` interaction`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 7281 (` Also`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 1779 (` check`)
+Grammar still awaiting trigger after token 421 (` if`)
+Grammar still awaiting trigger after token 894 (` any`)
+Grammar still awaiting trigger after token 15155 (` commitment`)
+Grammar still awaiting trigger after token 311 (` to`)
+Grammar still awaiting trigger after token 4938 (` memory`)
+Grammar still awaiting trigger after token 374 (` is`)
+Grammar still awaiting trigger after token 4362 (` needed`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 714 (` but`)
+Grammar still awaiting trigger after token 2474 (` since`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 1196 (` user`)
+Grammar still awaiting trigger after token 12492 (` hasn`)
+Grammar still awaiting trigger after token 944 (`'t`)
+Grammar still awaiting trigger after token 3897 (` provided`)
+Grammar still awaiting trigger after token 894 (` any`)
+Grammar still awaiting trigger after token 3151 (` specific`)
+Grammar still awaiting trigger after token 3565 (` details`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 7196 (` maybe`)
+Grammar still awaiting trigger after token 537 (` not`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 4710 (`
 
-###############################
-# Primitive value type symbols
-###############################
-forced_toolcall ::= "<tool_call>" ws root ws "</tool_call>" ws
-forced_root ::= forced_toolcall+
-boolean ::= "true" | "false" ws
-integer ::= ("-"? ([0-9] | [1-9] [0-9]*)) ws
-null ::= "null" ws
-number ::= ("-"? ([0-9] | [1-9] [0-9]*)) ("." [0-9]+)? ([eE] [-+]? [0-9]+)? ws
-string ::= "\"" ([^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]))* "\"" ws
-ws ::= [ \t\n]*
+`)
+Grammar still awaiting trigger after token 40 (`I`)
+Grammar still awaiting trigger after token 1265 (` should`)
+Grammar still awaiting trigger after token 5944 (` structure`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 2033 (` response`)
+Grammar still awaiting trigger after token 311 (` to`)
+Grammar still awaiting trigger after token 387 (` be`)
+Grammar still awaiting trigger after token 63594 (` concise`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 990 (` use`)
+Grammar still awaiting trigger after token 1059 (` her`)
+Grammar still awaiting trigger after token 17294 (` personality`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 323 (` and`)
+Grammar still awaiting trigger after token 21399 (` invite`)
+Grammar still awaiting trigger after token 279 (` the`)
+Grammar still awaiting trigger after token 1196 (` user`)
+Grammar still awaiting trigger after token 311 (` to`)
+Grammar still awaiting trigger after token 10354 (` proceed`)
+Grammar still awaiting trigger after token 448 (` with`)
+Grammar still awaiting trigger after token 862 (` their`)
+Grammar still awaiting trigger after token 1681 (` request`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 34006 (` Avoid`)
+Grammar still awaiting trigger after token 894 (` any`)
+Grammar still awaiting trigger after token 38432 (` overly`)
+Grammar still awaiting trigger after token 6785 (` positive`)
+Grammar still awaiting trigger after token 476 (` or`)
+Grammar still awaiting trigger after token 23541 (` eager`)
+Grammar still awaiting trigger after token 16232 (` tone`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 10696 (` Maybe`)
+Grammar still awaiting trigger after token 2494 (` something`)
+Grammar still awaiting trigger after token 1075 (` like`)
+Grammar still awaiting trigger after token 11 (`,`)
+Grammar still awaiting trigger after token 330 (` "`)
+Grammar still awaiting trigger after token 9707 (`Hello`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 2585 (` How`)
+Grammar still awaiting trigger after token 646 (` can`)
+Grammar still awaiting trigger after token 358 (` I`)
+Grammar still awaiting trigger after token 7789 (` assist`)
+Grammar still awaiting trigger after token 498 (` you`)
+Grammar still awaiting trigger after token 3351 (` today`)
+Grammar still awaiting trigger after token 7521 (`?"`)
+Grammar still awaiting trigger after token 714 (` but`)
+Grammar still awaiting trigger after token 1319 (` ph`)
+Grammar still awaiting trigger after token 81 (`r`)
+Grammar still awaiting trigger after token 1475 (`ased`)
+Grammar still awaiting trigger after token 304 (` in`)
+Grammar still awaiting trigger after token 264 (` a`)
+Grammar still awaiting trigger after token 1616 (` way`)
+Grammar still awaiting trigger after token 429 (` that`)
+Grammar still awaiting trigger after token 25963 (` reflects`)
+Grammar still awaiting trigger after token 1059 (` her`)
+Grammar still awaiting trigger after token 74236 (` pragmatic`)
+Grammar still awaiting trigger after token 6993 (` nature`)
+Grammar still awaiting trigger after token 624 (`.
+`)
+Grammar still awaiting trigger after token 151668 (`</think>`)
+Grammar still awaiting trigger after token 271 (`
 
-llama_grammar_init_impl: failed to parse grammar
-ERROR: 2025-11-11T23:57:22.752561Z ERROR nobodywho::chat: Worker crashed: Error reading string: Error creating response: Error during inference step: Error while generating response: Invalid sampler configuration
-   at: <nobodywho_godot::GodotWriter as std::io::Write>::write (godot/src/lib.rs:1010)
+`)
+Grammar still awaiting trigger after token 1 (`"`)
+Grammar still awaiting trigger after token 9707 (`Hello`)
+Grammar still awaiting trigger after token 13 (`.`)
+Grammar still awaiting trigger after token 2585 (` How`)
+Grammar still awaiting trigger after token 646 (` can`)
+Grammar still awaiting trigger after token 358 (` I`)
+Grammar still awaiting trigger after token 7789 (` assist`)
+Grammar still awaiting trigger after token 498 (` you`)
+Grammar still awaiting trigger after token 3351 (` today`)
+Grammar still awaiting trigger after token 7521 (`?"`)
+Grammar still awaiting trigger after token 151645 (`<|im_end|>`)
+WARNING: 2025-11-12T00:20:07.280067Z  WARN nobodywho::chat: No tool calls extracted during forced tool calling - breaking loop
+     at: <nobodywho_godot::GodotWriter as std::io::Write>::write (godot/src/lib.rs:1012)
+2025-11-12T00:20:07.280146Z  INFO nobodywho::chat: All min_calls constraints met, transitioning to post-tool behavior
+2025-11-12T00:20:07.280166Z  INFO nobodywho::chat: Continuing with user-specified custom grammar
+ERROR: [panic core/src/llm.rs:176]  assertion failed: tokens.len() > 0
+   at: godot_core::private::set_gdext_hook::{{closure}} (/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/godot-core-0.3.5/src/private.rs:310)
+Final Cleaned Response: <think>
+Okay, the user said "Hello Kimora." I need to respond as Kimora LOUIS. Let me start by using the remember tool to check if there's any existing information about the user or the context. Since it's a simple greeting, maybe there's not much in the memory yet.
+
+I should consider Kimora's personality traits: she's pragmatic, somewhat cheerful, but also pessimistic and cautious. She might respond politely but with a hint of reserve. Also, she's a non-profit worker, so maybe she's focused on practical matters.
+
+The user's message is just a greeting, so Kimora might acknowledge it and ask how she can assist. But given her traits, she might not be overly enthusiastic. She could be direct and to the point, maybe a bit blunt. Let me make sure to keep the response in line with her attributes.
+
+Since there's no specific information to recall, the remember tool might not yield anything. So, the response should be a standard greeting, possibly with a question to prompt further interaction. Also, check if any commitment to memory is needed, but since the user hasn't provided any specific details, maybe not.
+
+I should structure the response to be concise, use her personality, and invite the user to proceed with their request. Avoid any overly positive or eager tone. Maybe something like, "Hello. How can I assist you today?" but phrased in a way that reflects her pragmatic nature.
+</think>
+
+"Hello. How can I assist you today?"
+
+[panic backtrace]
+   0: godot_core::private::set_gdext_hook::{{closure}}
+             at /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/godot-core-0.3.5/src/private.rs:287:44
+   1: <alloc::boxed::Box<F,A> as core::ops::function::Fn<Args>>::call
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/alloc/src/boxed.rs:1999:9
+   2: std::panicking::panic_with_hook
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panicking.rs:842:13
+   3: std::panicking::panic_handler::{{closure}}
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panicking.rs:700:13
+   4: std::sys::backtrace::__rust_end_short_backtrace
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/sys/backtrace.rs:174:18
+   5: __rustc::rust_begin_unwind
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panicking.rs:698:5
+   6: core::panicking::panic_fmt
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/core/src/panicking.rs:75:14
+   7: core::panicking::panic
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/core/src/panicking.rs:145:5
+   8: nobodywho::llm::Worker<T>::read_tokens
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/llm.rs:176:9
+   9: nobodywho::chat::<impl nobodywho::llm::Worker<nobodywho::chat::ChatWorker>>::read_tokens_and_generate_response
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/chat.rs:1245:14
+  10: nobodywho::chat::<impl nobodywho::llm::Worker<nobodywho::chat::ChatWorker>>::wrapped_update_context_and_generate_response
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/chat.rs:1283:14
+  11: nobodywho::chat::<impl nobodywho::llm::Worker<nobodywho::chat::ChatWorker>>::say
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/chat.rs:1113:47
+  12: nobodywho::chat::run_worker
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/chat.rs:426:30
+  13: nobodywho::chat::ChatHandle::new::{{closure}}
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/chat.rs:193:29
+  14: std::sys::backtrace::__rust_begin_short_backtrace
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/sys/backtrace.rs:158:18
+  15: std::thread::Builder::spawn_unchecked_::{{closure}}::{{closure}}
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/thread/mod.rs:559:17
+  16: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/core/src/panic/unwind_safe.rs:274:9
+  17: std::panicking::catch_unwind::do_call
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panicking.rs:590:40
+  18: __rust_try
+  19: std::panicking::catch_unwind
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panicking.rs:553:19
+  20: std::panic::catch_unwind
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panic.rs:359:14
+  21: std::thread::Builder::spawn_unchecked_::{{closure}}
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/thread/mod.rs:557:30
+  22: core::ops::function::FnOnce::call_once{{vtable.shim}}
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/core/src/ops/function.rs:250:5
+  23: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/alloc/src/boxed.rs:1985:9
+  24: std::sys::thread::unix::Thread::new::thread_start
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/sys/thread/unix.rs:126:17
+  25: <unknown>
+  26: <unknown>

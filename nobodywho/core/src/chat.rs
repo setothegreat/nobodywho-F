@@ -1048,7 +1048,7 @@ impl<'a> Worker<'_, ChatWorker> {
                 let mut forced_sampler = sampler.clone();
                 forced_sampler.use_grammar = true;
                 forced_sampler.grammar_root = "superroot".into();
-                forced_sampler.lazy_grammar_trigger = "<tool_call>".into();
+                forced_sampler.lazy_grammar_trigger = String::new(); // No lazy trigger - force immediate tool calling
                 forced_sampler.gbnf_grammar = forced_grammar.to_string();
 
                 // Generate response with forced tools
@@ -1100,41 +1100,50 @@ impl<'a> Worker<'_, ChatWorker> {
                 }
             }
 
-            info!("All min_calls constraints met, transitioning to post-tool behavior");
+            // Check if we actually met all min_calls constraints
+            let mins_met = tracker.all_mins_met();
 
-            // After forced tools complete, check if we should continue with custom grammar or normal generation
-            if sampler.use_grammar
-                && !sampler.gbnf_grammar.is_empty()
-                && sampler.lazy_grammar_trigger.is_empty()
-            {
-                // User has specified a custom grammar (non-lazy), use it for continued generation
-                info!("Continuing with user-specified custom grammar");
+            if mins_met {
+                info!("All min_calls constraints met, transitioning to post-tool behavior");
 
-                let continued_response = self.wrapped_update_context_and_generate_response(
-                    sampler.clone(),
-                    stop_words.clone(),
-                    respond.clone(),
-                    tool_call_begin.into(),
-                )?;
+                // After forced tools complete, check if we should continue with custom grammar or normal generation
+                if sampler.use_grammar
+                    && !sampler.gbnf_grammar.is_empty()
+                    && sampler.lazy_grammar_trigger.is_empty()
+                {
+                    // User has specified a custom grammar (non-lazy), use it for continued generation
+                    info!("Continuing with user-specified custom grammar");
 
-                accumulated_response.push_str(&continued_response);
+                    let continued_response = self.wrapped_update_context_and_generate_response(
+                        sampler.clone(),
+                        stop_words.clone(),
+                        respond.clone(),
+                        tool_call_begin.into(),
+                    )?;
+
+                    accumulated_response.push_str(&continued_response);
+                } else {
+                    // Continue with normal generation (no grammar constraints)
+                    info!("Continuing with normal text generation");
+
+                    let mut normal_sampler = sampler.clone();
+                    normal_sampler.use_grammar = false;
+                    normal_sampler.gbnf_grammar.clear();
+                    normal_sampler.lazy_grammar_trigger.clear();
+
+                    let continued_response = self.wrapped_update_context_and_generate_response(
+                        normal_sampler,
+                        stop_words.clone(),
+                        respond.clone(),
+                        tool_call_begin.into(),
+                    )?;
+
+                    accumulated_response.push_str(&continued_response);
+                }
             } else {
-                // Continue with normal generation (no grammar constraints)
-                info!("Continuing with normal text generation");
-
-                let mut normal_sampler = sampler.clone();
-                normal_sampler.use_grammar = false;
-                normal_sampler.gbnf_grammar.clear();
-                normal_sampler.lazy_grammar_trigger.clear();
-
-                let continued_response = self.wrapped_update_context_and_generate_response(
-                    normal_sampler,
-                    stop_words.clone(),
-                    respond.clone(),
-                    tool_call_begin.into(),
-                )?;
-
-                accumulated_response.push_str(&continued_response);
+                warn!(
+                    "Forced tool loop exited early without meeting min_calls (mins_met = false) - skipping continuation to avoid panic"
+                );
             }
 
             // Add the complete response (including prefix + tool calls + continued generation) to chat
