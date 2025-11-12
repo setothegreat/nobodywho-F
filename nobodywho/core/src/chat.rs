@@ -1082,7 +1082,7 @@ impl<'a> Worker<'_, ChatWorker> {
                 let mut forced_sampler = sampler.clone();
                 forced_sampler.use_grammar = true;
                 forced_sampler.grammar_root = "superroot".into();
-                forced_sampler.lazy_grammar_trigger = "<think>".into(); // USE LAZY TRIGGER - grammar activates when model generates this
+                forced_sampler.lazy_grammar_trigger = "</think>".into(); // USE LAZY TRIGGER - grammar activates when model generates this
                 forced_sampler.gbnf_grammar = forced_grammar.to_string();
 
                 debug!(
