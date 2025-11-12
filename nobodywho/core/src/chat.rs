@@ -1129,7 +1129,10 @@ impl<'a> Worker<'_, ChatWorker> {
                 let forced_grammar = if !sampler.manual_tool_prefix.is_empty() {
                     // Use composite grammar with prefix
                     info!("Generating grammar with enforced prefix and tool calls");
-                    match grammar_with_prefix_and_tools(&sampler.manual_tool_prefix, &available_tools) {
+                    match grammar_with_prefix_and_tools(
+                        &sampler.manual_tool_prefix,
+                        &available_tools,
+                    ) {
                         Ok(g) => g,
                         Err(e) => {
                             error!("Failed generating composite grammar: {e:?}. Falling back.");
