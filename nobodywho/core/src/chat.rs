@@ -1360,14 +1360,28 @@ impl<'a> Worker<'_, ChatWorker> {
         let _gil_guard = GLOBAL_INFERENCE_LOCK.lock();
         let inference_lock_token = _gil_guard.unwrap();
 
-        Ok(self
-            .read_tokens(tokens, &inference_lock_token)?
-            .generate_response_until_done(
+        // Handle empty token vectors (context already up-to-date)
+        // This can happen when forced tool calling generates immediately after prefix generation
+        if tokens.is_empty() {
+            trace!("No new tokens to read, proceeding directly to generation");
+            // Skip read_tokens and go directly to generation
+            Ok(self.generate_response_until_done(
                 sampler.clone(),
                 stop_words.clone(),
                 wrapped_respond,
                 &inference_lock_token,
             )?)
+        } else {
+            // Normal path: read tokens then generate
+            Ok(self
+                .read_tokens(tokens, &inference_lock_token)?
+                .generate_response_until_done(
+                    sampler.clone(),
+                    stop_words.clone(),
+                    wrapped_respond,
+                    &inference_lock_token,
+                )?)
+        }
     }
 
     fn wrapped_update_context_and_generate_response<F>(

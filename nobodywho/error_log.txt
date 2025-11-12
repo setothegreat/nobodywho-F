@@ -1,0 +1,59 @@
+2025-11-12T02:37:22.837633Z  INFO nobodywho::chat: Starting forced tool calling mode with 1 tools in sequence
+2025-11-12T02:37:22.837715Z  INFO nobodywho::chat: Generating manual tool prefix
+2025-11-12T02:37:23.569774Z  INFO nobodywho::chat: Worker writing until done
+2025-11-12T02:37:26.594632Z  INFO nobodywho::chat: Forced tool iteration 1/50, mins_met: false
+ERROR: [panic core/src/llm.rs:176]  assertion failed: tokens.len() > 0
+   at: godot_core::private::set_gdext_hook::{{closure}} (/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/godot-core-0.3.5/src/private.rs:310)
+
+[panic backtrace]
+   0: godot_core::private::set_gdext_hook::{{closure}}
+             at /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/godot-core-0.3.5/src/private.rs:287:44
+   1: <alloc::boxed::Box<F,A> as core::ops::function::Fn<Args>>::call
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/alloc/src/boxed.rs:1999:9
+   2: std::panicking::panic_with_hook
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panicking.rs:842:13
+   3: std::panicking::panic_handler::{{closure}}
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panicking.rs:700:13
+   4: std::sys::backtrace::__rust_end_short_backtrace
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/sys/backtrace.rs:174:18
+   5: __rustc::rust_begin_unwind
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panicking.rs:698:5
+   6: core::panicking::panic_fmt
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/core/src/panicking.rs:75:14
+   7: core::panicking::panic
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/core/src/panicking.rs:145:5
+   8: nobodywho::llm::Worker<T>::read_tokens
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/llm.rs:176:9
+   9: nobodywho::chat::<impl nobodywho::llm::Worker<nobodywho::chat::ChatWorker>>::read_tokens_and_generate_response
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/chat.rs:1364:14
+  10: nobodywho::chat::<impl nobodywho::llm::Worker<nobodywho::chat::ChatWorker>>::wrapped_update_context_and_generate_response
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/chat.rs:1402:14
+  11: nobodywho::chat::<impl nobodywho::llm::Worker<nobodywho::chat::ChatWorker>>::say
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/chat.rs:1116:37
+  12: nobodywho::chat::run_worker
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/chat.rs:463:30
+  13: nobodywho::chat::ChatHandle::new::{{closure}}
+             at /home/runner/work/nobodywho-F/nobodywho-F/nobodywho/core/src/chat.rs:230:29
+  14: std::sys::backtrace::__rust_begin_short_backtrace
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/sys/backtrace.rs:158:18
+  15: std::thread::Builder::spawn_unchecked_::{{closure}}::{{closure}}
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/thread/mod.rs:559:17
+  16: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/core/src/panic/unwind_safe.rs:274:9
+  17: std::panicking::catch_unwind::do_call
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panicking.rs:590:40
+  18: __rust_try
+  19: std::panicking::catch_unwind
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panicking.rs:553:19
+  20: std::panic::catch_unwind
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/panic.rs:359:14
+  21: std::thread::Builder::spawn_unchecked_::{{closure}}
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/thread/mod.rs:557:30
+  22: core::ops::function::FnOnce::call_once{{vtable.shim}}
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/core/src/ops/function.rs:250:5
+  23: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/alloc/src/boxed.rs:1985:9
+  24: std::sys::thread::unix::Thread::new::thread_start
+             at /rustc/ed61e7d7e242494fb7057f2657300d9e77bb4fcb/library/std/src/sys/thread/unix.rs:126:17
+  25: <unknown>
+  26: <unknown>
