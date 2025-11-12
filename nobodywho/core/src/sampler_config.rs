@@ -137,6 +137,102 @@ pub enum SamplerMethod {
     Temperature(Temperature),
     MirostatV1(MirostatV1),
     MirostatV2(MirostatV2),
+    Custom(Custom),
+}
+
+/// Final sampler mode for Custom sampler
+#[derive(Clone, Debug)]
+pub enum FinalSamplerMode {
+    Distribution,
+    MirostatV1,
+    MirostatV2,
+}
+
+impl Default for FinalSamplerMode {
+    fn default() -> Self {
+        Self::Distribution
+    }
+}
+
+/// Custom sampler chain that allows multiple parameters to be enabled simultaneously
+#[derive(Clone, Debug)]
+pub struct Custom {
+    // DRY sampler
+    pub dry_enabled: bool,
+    pub dry_multiplier: f32,
+    pub dry_base: f32,
+    pub dry_allowed_length: i32,
+    pub dry_penalty_last_n: i32,
+
+    // Filtering samplers
+    pub top_k_enabled: bool,
+    pub top_k: i32,
+
+    pub top_p_enabled: bool,
+    pub top_p: f32,
+    pub top_p_min_keep: u32,
+
+    pub min_p_enabled: bool,
+    pub min_p: f32,
+    pub min_p_min_keep: u32,
+
+    pub xtc_enabled: bool,
+    pub xtc_probability: f32,
+    pub xtc_threshold: f32,
+    pub xtc_min_keep: u32,
+
+    // Temperature (always applied)
+    pub temperature: f32,
+
+    // Final sampler
+    pub final_sampler: FinalSamplerMode,
+    pub mirostat_tau: f32,
+    pub mirostat_eta: f32,
+
+    pub seed: u32,
+}
+
+impl Default for Custom {
+    fn default() -> Self {
+        Self {
+            // DRY defaults
+            dry_enabled: false,
+            dry_multiplier: 0.0,
+            dry_base: 1.75,
+            dry_allowed_length: 2,
+            dry_penalty_last_n: -1,
+
+            // TopK defaults
+            top_k_enabled: false,
+            top_k: 40,
+
+            // TopP defaults
+            top_p_enabled: false,
+            top_p: 0.95,
+            top_p_min_keep: 0,
+
+            // MinP defaults
+            min_p_enabled: false,
+            min_p: 0.05,
+            min_p_min_keep: 0,
+
+            // XTC defaults
+            xtc_enabled: false,
+            xtc_probability: 0.5,
+            xtc_threshold: 0.1,
+            xtc_min_keep: 0,
+
+            // Temperature default
+            temperature: 0.8,
+
+            // Final sampler defaults
+            final_sampler: FinalSamplerMode::Distribution,
+            mirostat_tau: 5.0,
+            mirostat_eta: 0.1,
+
+            seed: 1234,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -404,6 +500,73 @@ pub fn make_sampler(model: &LlamaModel, sampler_config: SamplerConfig) -> Option
         SamplerMethod::MirostatV2(conf) => {
             chainvec.push(LlamaSampler::temp(conf.temperature));
             chainvec.push(LlamaSampler::mirostat_v2(conf.seed, conf.tau, conf.eta));
+        }
+        SamplerMethod::Custom(conf) => {
+            // Add DRY sampler if enabled
+            if conf.dry_enabled {
+                chainvec.push(LlamaSampler::dry(
+                    model,
+                    conf.dry_multiplier,
+                    conf.dry_base,
+                    conf.dry_allowed_length,
+                    conf.dry_penalty_last_n,
+                    vec!["\n", ":", "\"", "*"],
+                ));
+            }
+
+            // Add filtering samplers if enabled
+            if conf.top_k_enabled {
+                chainvec.push(LlamaSampler::top_k(conf.top_k));
+            }
+
+            if conf.top_p_enabled {
+                chainvec.push(LlamaSampler::top_p(
+                    conf.top_p,
+                    conf.top_p_min_keep as usize,
+                ));
+            }
+
+            if conf.min_p_enabled {
+                chainvec.push(LlamaSampler::min_p(
+                    conf.min_p,
+                    conf.min_p_min_keep as usize,
+                ));
+            }
+
+            if conf.xtc_enabled {
+                chainvec.push(LlamaSampler::xtc(
+                    conf.xtc_probability,
+                    conf.xtc_threshold,
+                    conf.xtc_min_keep as usize,
+                    conf.seed,
+                ));
+            }
+
+            // Always apply temperature
+            chainvec.push(LlamaSampler::temp(conf.temperature));
+
+            // Add final sampler based on mode
+            match conf.final_sampler {
+                FinalSamplerMode::Distribution => {
+                    chainvec.push(LlamaSampler::dist(conf.seed));
+                }
+                FinalSamplerMode::MirostatV1 => {
+                    chainvec.push(LlamaSampler::mirostat(
+                        model.n_vocab(),
+                        conf.seed,
+                        conf.mirostat_tau,
+                        conf.mirostat_eta,
+                        100,
+                    ));
+                }
+                FinalSamplerMode::MirostatV2 => {
+                    chainvec.push(LlamaSampler::mirostat_v2(
+                        conf.seed,
+                        conf.mirostat_tau,
+                        conf.mirostat_eta,
+                    ));
+                }
+            }
         }
     }
 

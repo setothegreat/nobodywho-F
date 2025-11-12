@@ -5,6 +5,14 @@ use nobodywho::sampler_config;
 
 #[derive(GodotConvert, Var, Export, Debug, Clone, Copy)]
 #[godot(via = GString)]
+enum FinalSamplerModeName {
+    Distribution,
+    MirostatV1,
+    MirostatV2,
+}
+
+#[derive(GodotConvert, Var, Export, Debug, Clone, Copy)]
+#[godot(via = GString)]
 enum SamplerMethodName {
     Greedy,
     DRY,
@@ -16,6 +24,7 @@ enum SamplerMethodName {
     Temperature,
     MirostatV1,
     MirostatV2,
+    Custom,
 }
 
 #[derive(GodotClass)]
@@ -141,6 +150,7 @@ impl IResource for NobodyWhoSampler {
             sampler_config::SamplerMethod::Temperature(_) => SamplerMethodName::Temperature,
             sampler_config::SamplerMethod::MirostatV1(_) => SamplerMethodName::MirostatV1,
             sampler_config::SamplerMethod::MirostatV2(_) => SamplerMethodName::MirostatV2,
+            sampler_config::SamplerMethod::Custom(_) => SamplerMethodName::Custom,
         };
         Self {
             method: methodname,
@@ -172,9 +182,39 @@ impl IResource for NobodyWhoSampler {
                 TypicalP { seed: u32, typ_p: f32, min_keep: u32 },
                 Temperature { temperature: f32, seed: u32 },
                 MirostatV1 { temperature: f32, seed: u32, tau: f32, eta: f32 },
-                MirostatV2 { temperature: f32, seed: u32, tau: f32, eta: f32 }
+                MirostatV2 { temperature: f32, seed: u32, tau: f32, eta: f32 },
+                Custom {
+                    seed: u32,
+                    dry_enabled: bool,
+                    dry_multiplier: f32,
+                    dry_base: f32,
+                    dry_allowed_length: i32,
+                    dry_penalty_last_n: i32,
+                    top_k_enabled: bool,
+                    top_k: i32,
+                    top_p_enabled: bool,
+                    top_p: f32,
+                    top_p_min_keep: u32,
+                    min_p_enabled: bool,
+                    min_p: f32,
+                    min_p_min_keep: u32,
+                    xtc_enabled: bool,
+                    xtc_probability: f32,
+                    xtc_threshold: f32,
+                    xtc_min_keep: u32,
+                    temperature: f32,
+                    mirostat_tau: f32,
+                    mirostat_eta: f32
+                }
             }
         );
+
+        // Add final_sampler property for Custom method
+        if matches!(self.method, SamplerMethodName::Custom) {
+            properties.push(
+                godot::meta::PropertyInfo::new_export::<FinalSamplerModeName>("final_sampler"),
+            );
+        }
 
         // FIXED: Proper array type hint for Dictionary arrays
         // Format is "type_hint:hint_string" where type_hint is the VariantType enum value
@@ -205,6 +245,24 @@ impl IResource for NobodyWhoSampler {
             return Some(godot_array.to_variant());
         }
 
+        // Handle final_sampler for Custom method
+        if property_str == "final_sampler" {
+            if let sampler_config::SamplerMethod::Custom(conf) = &self.sampler_config.method {
+                let mode_name = match conf.final_sampler {
+                    sampler_config::FinalSamplerMode::Distribution => {
+                        FinalSamplerModeName::Distribution
+                    }
+                    sampler_config::FinalSamplerMode::MirostatV1 => {
+                        FinalSamplerModeName::MirostatV1
+                    }
+                    sampler_config::FinalSamplerMode::MirostatV2 => {
+                        FinalSamplerModeName::MirostatV2
+                    }
+                };
+                return Some(Variant::from(mode_name));
+            }
+        }
+
         get_property!(
             self, property,
             base: {
@@ -227,7 +285,30 @@ impl IResource for NobodyWhoSampler {
                 TypicalP { seed: u32, typ_p: f32, min_keep: u32 },
                 Temperature { temperature: f32, seed: u32 },
                 MirostatV1 { temperature: f32, seed: u32, tau: f32, eta: f32 },
-                MirostatV2 { temperature: f32, seed: u32, tau: f32, eta: f32 }
+                MirostatV2 { temperature: f32, seed: u32, tau: f32, eta: f32 },
+                Custom {
+                    seed: u32,
+                    dry_enabled: bool,
+                    dry_multiplier: f32,
+                    dry_base: f32,
+                    dry_allowed_length: i32,
+                    dry_penalty_last_n: i32,
+                    top_k_enabled: bool,
+                    top_k: i32,
+                    top_p_enabled: bool,
+                    top_p: f32,
+                    top_p_min_keep: u32,
+                    min_p_enabled: bool,
+                    min_p: f32,
+                    min_p_min_keep: u32,
+                    xtc_enabled: bool,
+                    xtc_probability: f32,
+                    xtc_threshold: f32,
+                    xtc_min_keep: u32,
+                    temperature: f32,
+                    mirostat_tau: f32,
+                    mirostat_eta: f32
+                }
             }
         )
     }
@@ -309,6 +390,27 @@ impl IResource for NobodyWhoSampler {
             return false;
         }
 
+        // Handle final_sampler for Custom method
+        if property_str == "final_sampler" {
+            if let sampler_config::SamplerMethod::Custom(conf) = &mut self.sampler_config.method {
+                if let Ok(mode_name) = FinalSamplerModeName::try_from_variant(&value) {
+                    conf.final_sampler = match mode_name {
+                        FinalSamplerModeName::Distribution => {
+                            sampler_config::FinalSamplerMode::Distribution
+                        }
+                        FinalSamplerModeName::MirostatV1 => {
+                            sampler_config::FinalSamplerMode::MirostatV1
+                        }
+                        FinalSamplerModeName::MirostatV2 => {
+                            sampler_config::FinalSamplerMode::MirostatV2
+                        }
+                    };
+                    return true;
+                }
+            }
+            return false;
+        }
+
         set_property!(
             self, property, value,
             base: {
@@ -331,7 +433,30 @@ impl IResource for NobodyWhoSampler {
                 TypicalP { seed: u32, typ_p: f32, min_keep: u32 },
                 Temperature { temperature: f32, seed: u32 },
                 MirostatV1 { temperature: f32, seed: u32, tau: f32, eta: f32 },
-                MirostatV2 { temperature: f32, seed: u32, tau: f32, eta: f32 }
+                MirostatV2 { temperature: f32, seed: u32, tau: f32, eta: f32 },
+                Custom {
+                    seed: u32,
+                    dry_enabled: bool,
+                    dry_multiplier: f32,
+                    dry_base: f32,
+                    dry_allowed_length: i32,
+                    dry_penalty_last_n: i32,
+                    top_k_enabled: bool,
+                    top_k: i32,
+                    top_p_enabled: bool,
+                    top_p: f32,
+                    top_p_min_keep: u32,
+                    min_p_enabled: bool,
+                    min_p: f32,
+                    min_p_min_keep: u32,
+                    xtc_enabled: bool,
+                    xtc_probability: f32,
+                    xtc_threshold: f32,
+                    xtc_min_keep: u32,
+                    temperature: f32,
+                    mirostat_tau: f32,
+                    mirostat_eta: f32
+                }
             }
         )
     }
