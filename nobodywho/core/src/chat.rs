@@ -695,6 +695,65 @@ fn grammar_from_tools(tools: &[Tool]) -> Result<gbnf::Grammar, gbnf::json::JsonS
     Ok(json_grammar)
 }
 
+/// Generate GBNF grammar that enforces a prefix followed by forced tool calls
+fn grammar_with_prefix_and_tools(
+    prefix: &str,
+    tools: &[Tool],
+) -> Result<gbnf::Grammar, gbnf::json::JsonSchemaParseError> {
+    // First generate the normal tool calling grammar
+    let mut tool_grammar = grammar_from_tools(tools)?;
+
+    // Create a prefix rule that enforces the exact prefix text
+    // We need to escape the prefix string for GBNF
+    let escaped_prefix = prefix.replace('\\', "\\\\").replace('"', "\\\"");
+
+    let prefix_rule = gbnf::GrammarItem::Rule(gbnf::Rule {
+        lhs: gbnf::NonTerminalSymbol {
+            name: "forced_prefix".into(),
+        },
+        rhs: gbnf::Production {
+            items: vec![gbnf::ProductionItem::Terminal(
+                gbnf::TerminalSymbol {
+                    value: escaped_prefix,
+                },
+                gbnf::RepetitionType::One,
+            )],
+        },
+    });
+
+    // Create a new root rule that combines prefix + tool calls
+    // This replaces "superroot" to become the new entry point
+    let combined_root = gbnf::GrammarItem::Rule(gbnf::Rule {
+        lhs: gbnf::NonTerminalSymbol {
+            name: "forced_superroot".into(),
+        },
+        rhs: gbnf::Production {
+            items: vec![
+                // First generate the prefix
+                gbnf::ProductionItem::NonTerminal(
+                    gbnf::NonTerminalSymbol {
+                        name: "forced_prefix".into(),
+                    },
+                    gbnf::RepetitionType::One,
+                ),
+                // Then generate tool calls (reference existing superroot which is OneOrMore toolcall)
+                gbnf::ProductionItem::NonTerminal(
+                    gbnf::NonTerminalSymbol {
+                        name: "superroot".into(),
+                    },
+                    gbnf::RepetitionType::One,
+                ),
+            ],
+        },
+    });
+
+    // Add the new rules to the grammar
+    tool_grammar.items.push(prefix_rule);
+    tool_grammar.items.push(combined_root);
+
+    Ok(tool_grammar)
+}
+
 // TOOL CHAT WORKER
 
 struct ChatWorker {
@@ -1032,13 +1091,12 @@ impl<'a> Worker<'_, ChatWorker> {
             // Initialize tracker
             let mut tracker = ToolCallTracker::new(&sampler.manual_tool_sequence);
 
-            // Auto-prepend manual_tool_prefix (hidden from user but in context)
-            // The prefix is injected directly without model generation
-            let mut accumulated_response = sampler.manual_tool_prefix.clone();
+            // The prefix will be grammar-enforced during generation, not injected
+            let mut accumulated_response = String::new();
 
             if !sampler.manual_tool_prefix.is_empty() {
                 info!(
-                    "Injecting manual_tool_prefix into response: {} chars",
+                    "Prefix will be grammar-enforced during generation: {} chars",
                     sampler.manual_tool_prefix.len()
                 );
             }
@@ -1067,28 +1125,45 @@ impl<'a> Worker<'_, ChatWorker> {
                     break;
                 }
 
-                // Generate grammar using the same function as normal tool calling
-                let forced_grammar = match grammar_from_tools(&available_tools) {
-                    Ok(g) => g,
-                    Err(e) => {
-                        error!("Failed generating forced tool grammar: {e:?}. Falling back to normal generation.");
-                        break;
+                // Generate grammar with enforced prefix and forced tools
+                let forced_grammar = if !sampler.manual_tool_prefix.is_empty() {
+                    // Use composite grammar with prefix
+                    info!("Generating grammar with enforced prefix and tool calls");
+                    match grammar_with_prefix_and_tools(&sampler.manual_tool_prefix, &available_tools) {
+                        Ok(g) => g,
+                        Err(e) => {
+                            error!("Failed generating composite grammar: {e:?}. Falling back.");
+                            break;
+                        }
+                    }
+                } else {
+                    // No prefix, just tool grammar
+                    match grammar_from_tools(&available_tools) {
+                        Ok(g) => g,
+                        Err(e) => {
+                            error!("Failed generating tool grammar: {e:?}. Falling back.");
+                            break;
+                        }
                     }
                 };
 
-                // Set up sampler with forced grammar AND LAZY TRIGGER
-                // Using lazy trigger allows the model to generate naturally until <tool_call>,
-                // then grammar constrains the tool call JSON to be valid
+                // Set up sampler with forced grammar, NO LAZY TRIGGER
+                // Grammar must be active immediately to enforce prefix generation
                 let mut forced_sampler = sampler.clone();
                 forced_sampler.use_grammar = true;
-                forced_sampler.grammar_root = "superroot".into();
-                forced_sampler.lazy_grammar_trigger = "</think>".into(); // USE LAZY TRIGGER - grammar activates when model generates this
+                forced_sampler.grammar_root = if !sampler.manual_tool_prefix.is_empty() {
+                    "forced_superroot".into() // Use composite root with prefix
+                } else {
+                    "superroot".into() // Use normal tool call root
+                };
+                forced_sampler.lazy_grammar_trigger = String::new(); // NO LAZY TRIGGER - force immediate
                 forced_sampler.gbnf_grammar = forced_grammar.to_string();
 
                 debug!(
-                    "About to generate with forced grammar. Lazy trigger: '{}', Grammar root: '{}', Grammar length: {} bytes",
-                    forced_sampler.lazy_grammar_trigger,
+                    "Grammar configured: root='{}', lazy_trigger='{}', has_prefix={}, grammar_len={} bytes",
                     forced_sampler.grammar_root,
+                    forced_sampler.lazy_grammar_trigger,
+                    !sampler.manual_tool_prefix.is_empty(),
                     forced_sampler.gbnf_grammar.len()
                 );
 
